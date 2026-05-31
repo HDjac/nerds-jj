@@ -27,7 +27,10 @@ if (checkMobile($useragent)) {
 }
 
 //$pid = htmlspecialchars($_GET['pid']);
-$pid = htmlspecialchars($_GET['ext_ref']);
+//$pid = "test123";
+// use URL param if present otherwise fall back to test123
+$pid = isset($_GET['ext_ref']) ? htmlspecialchars($_GET['ext_ref']) : "test123";
+//$pid = htmlspecialchars($_GET['ext_ref']);
 //$originParam = htmlspecialchars($_GET["origin"]);
 $originParam = htmlspecialchars($_GET["custom1"]);
 

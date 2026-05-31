@@ -38,7 +38,8 @@ export default function TaskController(props) {
 
   // Function to handle getting new tasks and setting correct task
   useEffect(() => {
-    if (task_list.length == 0) {
+    //changed from ==0 to 1 and loading task
+    if (task_list.length == 1 && task_list[0].title === "Loading...") {
       get_tasks().then((json) => {
 
         set_task_list(json.tasks);

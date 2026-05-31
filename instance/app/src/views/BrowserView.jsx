@@ -19,6 +19,23 @@ export default function BrowserView(props) {
   //const SHOW_DEBUG = process.env.NODE_ENV === "development";
   const SHOW_DEBUG = DEV_MODE;
   
+  useEffect(() => {
+    function handleCopy() {
+      const selectedText = window.getSelection().toString();
+
+      if (selectedText && selectedText.length > 0) {
+        window.__NERDS_INTERNAL_CLIPBOARD__ = selectedText;
+        console.log("Internal browser copy saved:", selectedText);
+      }
+    }
+
+    document.addEventListener("copy", handleCopy);
+
+    return () => {
+      document.removeEventListener("copy", handleCopy);
+    };
+  }, []);
+
   function debug(msg) {
     if (SHOW_DEBUG) {
       console.debug(msg);
@@ -62,6 +79,16 @@ export default function BrowserView(props) {
       rfb.addEventListener("disconnect", handleDisconnect);
       rfb.addEventListener("clipboard", handleClipboard);
       rfbObj.current = rfb;
+
+      rfbObj.current.addEventListener("clipboard", (e) => {
+        const text = e.detail.text;
+
+        if (text && text.length > 0) {
+          window.__NERDS_INTERNAL_CLIPBOARD__ = text;
+          localStorage.setItem("NERDS_INTERNAL_CLIPBOARD", text);
+          console.log("Internal browser clipboard saved:", text);
+        }
+      });
     }
 
   }

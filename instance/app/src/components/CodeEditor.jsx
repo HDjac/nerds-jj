@@ -32,11 +32,164 @@ export default function CodeEditor(props) {
     console.error("real_taskno is undefined");
   }
 
-  function handleEditorDidMount(editor, monaco) {
-    console.debug("handleEditorDidMount");
-    props.editorRef.current = editor;
+//monaco editor changes to prevent copy and paste from external browser but internal is allowed
 
+function handleEditorDidMount(editor, monaco) {
+  console.debug("handleEditorDidMount");
+  props.editorRef.current = editor;
+
+  let internalClipboard = "";
+  let allowNextPaste = false;
+
+  function getAllowedText() {
+    return (
+      window.__NERDS_INTERNAL_CLIPBOARD__ ||
+      localStorage.getItem("NERDS_INTERNAL_CLIPBOARD") ||
+      internalClipboard ||
+      ""
+    );
   }
+
+  function logEvent(event_type, blocked, extra = {}) {
+    props.submit("x", {
+      event_type,
+      source: "monaco_editor",
+      blocked,
+      timestamp: Date.now(),
+      platform: navigator.platform,
+      user_agent: navigator.userAgent,
+      ...extra
+    });
+  }
+
+  // Catch DOM/browser paste paths, including Mac Cmd+V, right-click paste, and Edit → Paste.
+  const editorDomNode = editor.getDomNode();
+
+  if (editorDomNode) {
+    editorDomNode.addEventListener(
+      "paste",
+      (e) => {
+        const pastedText = e.clipboardData.getData("text/plain");
+        const allowedText = getAllowedText();
+
+        if (pastedText && pastedText === allowedText) {
+          console.log("DOM internal paste allowed");
+          allowNextPaste = true;
+          return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        logEvent("external_dom_paste_blocked", true, {
+          source: "monaco_dom"
+        });
+
+        console.log("External DOM paste blocked");
+      },
+      true
+    );
+  }
+
+  // Copy from code editor marks clipboard as internal.
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
+    const selection = editor.getSelection();
+    const selectedText = editor.getModel().getValueInRange(selection);
+
+    internalClipboard = selectedText;
+    window.__NERDS_INTERNAL_CLIPBOARD__ = selectedText;
+    localStorage.setItem("NERDS_INTERNAL_CLIPBOARD", selectedText);
+
+    navigator.clipboard.writeText(selectedText);
+
+    logEvent("internal_code_copy", false);
+    console.log("Internal code copy saved");
+  });
+
+  // Cut from code editor marks clipboard as internal.
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
+    const selection = editor.getSelection();
+    const selectedText = editor.getModel().getValueInRange(selection);
+
+    internalClipboard = selectedText;
+    window.__NERDS_INTERNAL_CLIPBOARD__ = selectedText;
+    localStorage.setItem("NERDS_INTERNAL_CLIPBOARD", selectedText);
+
+    navigator.clipboard.writeText(selectedText);
+
+    editor.executeEdits("cut", [
+      {
+        range: selection,
+        text: ""
+      }
+    ]);
+
+    logEvent("internal_code_cut", false);
+    console.log("Internal code cut saved");
+  });
+
+  // Keyboard paste: Ctrl+V on Windows/Linux, Cmd+V on Mac.
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, async () => {
+    let clipText = "";
+
+    try {
+      clipText = await navigator.clipboard.readText();
+    } catch (err) {
+      console.log("Could not read clipboard", err);
+    }
+
+    const allowedText = getAllowedText();
+
+    if (clipText && clipText === allowedText) {
+      allowNextPaste = true;
+
+      const selection = editor.getSelection();
+
+      editor.executeEdits("internal-paste", [
+        {
+          range: selection,
+          text: clipText
+        }
+      ]);
+
+      logEvent("internal_paste_allowed", false);
+      console.log("Internal paste allowed");
+      return;
+    }
+
+    logEvent("external_keyboard_paste_blocked", true);
+    console.log("External keyboard paste blocked");
+  });
+
+  // Final backup: if anything still pastes, undo it unless it was internal.
+  editor.onDidPaste(async () => {
+    if (allowNextPaste) {
+      allowNextPaste = false;
+      console.log("Allowed internal paste was not undone");
+      return;
+    }
+
+    let clipText = "";
+
+    try {
+      clipText = await navigator.clipboard.readText();
+    } catch (err) {
+      console.log("Could not read clipboard after paste", err);
+    }
+
+    const allowedText = getAllowedText();
+
+    if (clipText && clipText === allowedText) {
+      console.log("Internal paste allowed by onDidPaste");
+      return;
+    }
+
+    logEvent("external_paste_undone", true);
+
+    console.log("External paste undone");
+    editor.trigger("keyboard", "undo", null);
+  });
+}
 
   function handleBeforeUnload(e) {
     e.preventDefault();

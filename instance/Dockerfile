@@ -34,7 +34,19 @@ USER user
 # Setup rust toolchain
 # Updating the crates.io index takes a while but i don't think it can be avoided.
 # Regardless of how you specify dependencies and their sources, their dependencies will use crates.io
-RUN cargo install wasm-pack@~0.13
+# Force Docker to update as root then switch back to user
+USER root
+RUN mkdir -p /var/lib/apt/lists/partial && \
+    apt-get update && \
+    apt-get install -y curl && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN curl -L https://github.com/rustwasm/wasm-pack/releases/download/v0.13.0/wasm-pack-v0.13.0-x86_64-unknown-linux-musl.tar.gz \
+  | tar xz && \
+  mv wasm-pack-v0.13.0-x86_64-unknown-linux-musl/wasm-pack /usr/local/bin/wasm-pack
+
+USER user
+
 COPY --chown=user:user ./testing ./testing
 
 # Setup EMSDK
