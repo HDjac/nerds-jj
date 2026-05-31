@@ -32,10 +32,12 @@ export default function TaskController(props) {
   const max_taskno = task_list.length;
   
   let task_desc = "Loading...";
-  if (max_taskno !== 0) {
-    task_desc = task_list[taskno].desc;
-  }
+  const currentTask = task_list[taskno];
 
+  if (currentTask && currentTask.desc) {
+    task_desc = currentTask.desc;
+  }
+  
   // Function to handle getting new tasks and setting correct task
   useEffect(() => {
     //changed from ==0 to 1 and loading task
@@ -54,10 +56,14 @@ export default function TaskController(props) {
   }, []);
 
   function handleIncr(increment, submitCode) {
-    set_taskno(taskno => taskno + increment);
-    /*set_current(0);
-    props.set_confirmed(false);*/
+    const nextTaskNo = taskno + increment;
+
+  if (nextTaskNo < 0 || nextTaskNo >= max_taskno) {
+    return;
+  }
+
     props.submit(submitCode);
+    set_taskno(nextTaskNo);
   }
 
   function handlePrev() {
@@ -106,7 +112,7 @@ export default function TaskController(props) {
   return (
     <div id="taskWindow">
       <div id="task">
-        <h3>Task {taskno}</h3>
+        <h3>Task {taskno + 1}</h3>
         <div dangerouslySetInnerHTML={{"__html":task_desc}}></div>
       </div>
       <div id="taskButtons">

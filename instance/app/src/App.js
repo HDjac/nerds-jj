@@ -37,18 +37,48 @@ function App() {
   //const [output, set_output] = useTaskState("output", taskno, "");
   const [editorValues, setEditorValues] = useSavedState("editorValue", task_list.map(t => t.placeholder_code));
 
-  const task = task_list[taskno];
 
-  // pseudo state for value in state array
-  const editor_value = editorValues[taskno];
+  const task = task_list[taskno] || {
+    title: "Loading...",
+    desc: "Loading task...",
+    placeholder_code: "",
+    fixed: true,
+    task_no: taskno
+  };
+
+  //pseudo state for value in state array
+  const editor_value = editorValues[taskno] || "";
+
+
+
   const set_editor_value = new_value => {
     setEditorValues(
       editorValues.map((item, i) => (i===taskno) ? new_value: item)
     )
   }
-  if (task.placeholder_code != "" && (editor_value==null || editor_value=="")) {
-    set_editor_value(task.placeholder_code)
-  }
+
+
+  useEffect(() => {
+    if (task.placeholder_code !== "" && (editor_value == null || editor_value === "")) {
+      set_editor_value(task.placeholder_code);
+    }
+  }, [taskno, task_list]);
+
+  
+  useEffect(() => {
+    if (task_list.length > 0 && editorValues.length !== task_list.length) {
+      setEditorValues(task_list.map(t => t.placeholder_code || ""));
+    }
+  }, [task_list]);
+
+  useEffect(() => {
+    if (task_list.length > 0 && outputs.length !== task_list.length) {
+      set_outputs(task_list.map(() => ""));
+    }
+  }, [task_list]);
+
+
+
 
   const output = outputs[taskno];
   const set_output = new_value => {
