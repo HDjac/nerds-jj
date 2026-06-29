@@ -1,14 +1,13 @@
-FROM node as build
+FROM node AS build
 WORKDIR /app/
-COPY ./app/package*.json ./
+COPY ./app/package.json .
+COPY ./app/package-lock.json .
 RUN npm install
 COPY ./app/ .
 ENV GENERATE_SOURCEMAP=false
 RUN npm run build
 
-# Fortunately the official rust container is built from the debian one so I can just substitute the rust container in
-# FROM debian:stable-slim
-FROM rust:1.86-slim
+FROM debian:stable-slim
 RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -yqq \
     build-essential \
     python3 \
@@ -29,31 +28,11 @@ RUN echo "load-module module-simple-protocol-tcp listen=127.0.0.1 format=s16le c
 RUN useradd -m --shell=/usr/bin/nologin user
 WORKDIR /home/user
 
-USER user
-
-# Setup rust toolchain
-# Updating the crates.io index takes a while but i don't think it can be avoided.
-# Regardless of how you specify dependencies and their sources, their dependencies will use crates.io
-# Force Docker to update as root then switch back to user
-USER root
-RUN mkdir -p /var/lib/apt/lists/partial && \
-    apt-get update && \
-    apt-get install -y curl && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN curl -L https://github.com/rustwasm/wasm-pack/releases/download/v0.13.0/wasm-pack-v0.13.0-x86_64-unknown-linux-musl.tar.gz \
-  | tar xz && \
-  mv wasm-pack-v0.13.0-x86_64-unknown-linux-musl/wasm-pack /usr/local/bin/wasm-pack
-
-USER user
-
-COPY --chown=user:user ./testing ./testing
-
 # Setup EMSDK
-#COPY --from=emscripten/emsdk /emsdk /emsdk
-#ENV EMSDK=/emsdk \
-#    EMSDK_NODE=/emsdk/node/14.18.2_64bit/bin/node \
-#    PATH="/emsdk:/emsdk/upstream/emscripten:/emsdk/upstream/bin:/emsdk/node/14.18.2_64bit/bin:${PATH}"
+COPY --from=emscripten/emsdk /emsdk /emsdk
+ENV EMSDK=/emsdk \
+    EMSDK_NODE=/emsdk/node/14.18.2_64bit/bin/node \
+    PATH="/emsdk:/emsdk/upstream/emscripten:/emsdk/upstream/bin:/emsdk/node/14.18.2_64bit/bin:${PATH}"
 
 #ADD https://deb.nodesource.com/setup_16.x /home/user/
 #RUN bash setup_16.x && apt-get install -y nodejs
@@ -62,7 +41,7 @@ COPY --chown=user:user ./testing ./testing
 #RUN apt install -y ./google-chrome-stable_current_amd64.deb
 
 #ADD https://github.com/novnc/noVNC/archive/refs/tags/v1.3.0.tar.gz /home/user/
-
+USER user
 ADD --chown=user:user https://github.com/novnc/websockify/archive/refs/tags/v0.10.0.tar.gz ./websockify.tar.gz
 RUN tar -xf websockify.tar.gz \
     && rm websockify.tar.gz
@@ -75,6 +54,7 @@ RUN cd websockify-0.10.0 && make
 COPY --chown=user:user ./audio-proxy.sh .
 COPY ./token.cfg /etc/websockify/token.cfg
 
+COPY --chown=user:user ./testing ./testing
 COPY --chown=user:user ./services ./services
 #COPY --chown=user:user ./app/ ./app/
 #WORKDIR /home/user/app

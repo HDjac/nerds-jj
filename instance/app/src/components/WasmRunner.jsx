@@ -28,17 +28,10 @@ export default function WasmRunner(props) {
   function runWasm(result, compile_time) {
     console.log("Attempting to run wasm file")
     //code is a javascript string of compiled wasm
-    const compilation_status = result["result"];
+    const code = result["result"];
     const compiler_out = result["compiler_output"];
-    const taskno = result["taskno"];
-    // js is the javascript code for loading the wasm
-    const js = result["js"];
     setLastTime((new Date() - compile_time)/1000);
 
-    print("*** Compiler Output ***");
-    print(compiler_out);
-
-    
     let module = {
       print: print,
       printErr: print,
@@ -46,6 +39,8 @@ export default function WasmRunner(props) {
       onAbort: () => {console.debug("onAbort"); setStat("idle");},
     };
 
+    print("*** Compiler Output ***");
+    print(compiler_out);
 
 
     if (result !== "error") {
@@ -53,13 +48,9 @@ export default function WasmRunner(props) {
       console.debug("Running output.js");
       setStat("run");
       try {
-        let ex = (new Function(js))();
-        console.log("ran javascript file");
-
-        console.log(wasm_bindgen)
-        console.log("SUCCESSFULLY RAN LIB MAIN")
+        Function("m", `"use strict"; var Module = m; ${code}`)(module);
       } catch (e) {
-        console.log("ERROR RUNNING WASM: ", e);
+        console.debug(e);
       }
 
     }
