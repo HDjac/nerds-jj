@@ -61,10 +61,10 @@ services:
     environment:
       GRAPHITE_LOG_RENDERING_PERFORMANCE: "false"
       GRAPHITE_LOG_CACHE_PERFORMANCE: "false"
-    ports:
-      - 8083:80
-      - 127.0.0.1:2003-2004:2003-2004
-      - 127.0.0.1:8125:8125/udp
+ #   ports:
+ #     - 8084:80
+ #     - 127.0.0.1:2003-2004:2003-2004
+ #     - 127.0.0.1:8125:8125/udp
 
 
 volumes:
