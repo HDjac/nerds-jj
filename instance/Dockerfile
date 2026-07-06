@@ -25,6 +25,10 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -yqq \
     runit && rm -rf /var/lib/apt/lists/*
 RUN echo "load-module module-simple-protocol-tcp listen=127.0.0.1 format=s16le channels=2 rate=48000 record=true playback=false" > /etc/pulse/default.pa.d/simple-protocol.pa
 
+# Install NERDS Firefox extension for ChatGPT prompt logging - updated to .xpi to avoid firefox not installing extension. still need to sign
+COPY ./firefox-extension/chatgpt-prompt-logger.xpi /opt/chatgpt-prompt-logger.xpi
+COPY ./firefox-policies/policies.json /usr/lib/firefox-esr/distribution/policies.json
+
 RUN useradd -m --shell=/usr/bin/nologin user
 WORKDIR /home/user
 

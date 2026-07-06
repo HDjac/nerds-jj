@@ -3,9 +3,11 @@ import logging
 import os
 import json
 import urllib.request as url_request
-from flask import Flask, request, redirect, make_response, abort
+from flask import Flask, request, redirect, make_response, jsonify, abort
 from subprocess import run, PIPE, STDOUT, CalledProcessError
 from shutil import copyfile, copy2
+from datetime import datetime
+
 
 import config as CONFIG
 from firefox import get_firefox_history
@@ -60,6 +62,42 @@ def setup():
         return response
     else:
         abort(400)
+
+# logging route for chatgpt prompts
+@app.route("/log-chatgpt-prompt", methods=["POST", "OPTIONS"])
+def log_chatgpt_prompt():
+    if request.method == "OPTIONS":
+        response = make_response("", 204)
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        return response
+
+    try:
+        data = request.get_json(force=True)
+
+        record = {
+            "event_type": "chatgpt_prompt",
+            "server_received_at": datetime.utcnow().isoformat() + "Z",
+            "client_timestamp": data.get("timestamp"),
+            "url": data.get("url"),
+            "prompt": data.get("prompt"),
+        }
+
+        log_path = "/home/user/testing/chatgpt_prompts.jsonl"
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
+
+        response = jsonify({"ok": True})
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        return response, 200
+
+    except Exception as e:
+        response = jsonify({"ok": False, "error": str(e)})
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        return response, 500
 
 @app.route("/api/compile", methods=["POST"])
 def compile():

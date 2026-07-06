@@ -1,0 +1,16 @@
+{
+  "policies": {
+    "ExtensionSettings": {
+      "chatgpt-prompt-logger@nerds.local": {
+        "installation_mode": "force_installed",
+        "install_url": "file:///opt/chatgpt-prompt-logger.xpi"
+      }
+    },
+    "Preferences": {
+      "xpinstall.signatures.required": {
+        "Value": false,
+        "Status": "locked"
+      }
+    }
+  }
+}
