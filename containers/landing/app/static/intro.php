@@ -9,11 +9,25 @@
 <div class="row">
     <div class="col-lg-6"  style="text-align: justify;">
         <p><h2>Introduction</h2></p>
-            <p>This study is about how programmers learn to write Rust code and what kinds of
-aids they find useful. We will ask you to complete some programming tasks. We
-will also provide you with an in-app web browser to search for resources.</p>
 
-            <p>There will be four tasks. <b>How long are we giving participants?</b></p>
+        <p>
+        This study examines how people complete secure software development tasks using different resources.
+        You will complete three short programming tasks in C.
+        </p>
+
+        <p>The three tasks involve:</p>
+        <ul>
+            <li>Reading code and adding comments that identify correctness or security issues</li>
+            <li>Fixing existing code so it is functionally correct and secure</li>
+            <li>Writing a small function from scratch</li>
+        </ul>
+
+        <p>
+        As you work, consider whether the code handles user input correctly, avoids unsafe assumptions,
+        and behaves securely for unexpected or malicious input.
+        </p>
+
+        <p><b>You will have 60 minutes to complete all tasks.</b></p>
 
     </div>
 </div>

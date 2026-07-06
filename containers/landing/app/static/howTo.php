@@ -12,40 +12,62 @@
 
 <h2>Study Instructions</h2>
 
-<p>For this study, you will be tasked with completing a linked list
-implementation in Rust. You will be asked to implement four
-different tasks in an online Rust editor:
+<p>
+For this study, you will be tasked with completing three C programming tasks. The tasks will appear in a random order. 
+You will need to use the online editor and built-in browser that you can access below. 
+</p>
 
 <ul>
-<li>Printing the list</li>
-<li>Inserting an item into the list</li>
-<li>Removing an item from the list</li>
-<li>Swapping two items in the list.</li>
+  <li><b>Read task:</b> Read existing code and add inline comments identifying correctness or security issues.</li>
+  <li><b>Fix task:</b> Modify existing code so it is functionally correct and secure.</li>
+  <li><b>Write task:</b> Write a small C function from scratch that satisfies the stated requirements.</li>
 </ul></p>
 
 <p>
-    For each task, we will provide you with the definition of the function you are being asked to complete.
-    Additionally we will provide you with a suite of besic tests to aid you in testing functionality.
+    For all tasks, consider whether the code correctly handles user input, accepts only valid usernames,
+    rejects invalid or overly long input, and avoids unsafe behavior.
 </p>
 
-<p>If you find that for any reason you are unable to complete a particular
-task, please click the button labeled “Skip Task." We appreciate your effort!
-You can stop and return to the study at any point; your progress is
-automatically saved. To return to the study, click on the original link given
-to you by the study administrators using the same computer you used to start
-the study. We use cookies to track your progress, so please ensure they are
-enabled for our site.</p>
+<h2>Using the Interface</h2>
+
+<p>
+The study environment has two main tabs:
+</p>
+
+<ul>
+  <li><b>Code tab:</b> Use this tab to read, edit, comment on, or write code.</li>
+  <li><b>Browser tab:</b> Use this built-in browser for any web resources you need during the study.</li>
+</ul>
+
+<p>
+Please use only the built-in browser for study-related web access. Copying and pasting from outside the
+study environment is restricted. Copying and pasting within the study environment may be allowed.
+</p>
+
+<h2>Task Navigation</h2>
+
+<p>
+Once you click <b>Next Task</b> or <b>Skip Task</b>, you will not be able to return to that task.
+Please make sure you are ready before moving on.
+</p>
+
+<p>
+If you are unable to complete a task, click <b>Skip Task</b>. We still appreciate your effort.
+</p>
+
+<h2>AI Tool Use</h2>
+
+<p>
+Follow the instructions provided for your assigned study condition.
+</p>
+
+<p>
+If your instructions say that AI tools are not allowed, do not use AI tools during the study.
+Using AI tools when they are not allowed may disqualify you from payment.
+</p>
 
 
-<h2>Need to look something up? Do it within the app</h2>
-<p>If you need to use any online resources to complete this task, please use
-the in-study browser window provided to you. You can find this browser window
-by clicking on the second tab at the top of the page. Please do any and all
-searches for this study in this browser window, to allow us to understand what
-resources you are using.</p>
-
-
-<p>Please wait while we start your editor, this will only take a couple of seconds. You can start as soon as the button shows “Start Study.”</p>
+<p>Please wait while we start your editor, this will only take a couple of seconds. You can start as soon as the button shows <b>Start Study</b>.</p>
         </div>
         <div class="col-lg-6">
             <img src="static/img/example_interface.png" style="width:100%;border:1px solid black" alt="Screenshot of study interface" />
