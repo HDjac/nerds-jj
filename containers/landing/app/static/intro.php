@@ -29,6 +29,7 @@
 
         <p><b>You will have 60 minutes to complete all tasks.</b></p>
 
+        <p><strong>Testing AI group:</strong> <?= htmlspecialchars($aiGroup, ENT_QUOTES, "UTF-8") ?></p>
     </div>
 </div>
 <form id="continue_form" method="post" action="howTo.php">
@@ -37,8 +38,10 @@
     data-size="invisible"
     data-callback="onReCaptcha"
     ></div>
-    <input type="hidden" id="pid" name="pid" value="<?php echo $pid ?>">
-    <input type="hidden" id="origin" name="origin" value="<?php echo $originParam ?>">
+    <input type="hidden" id="pid" name="pid" value="<?= htmlspecialchars($pid, ENT_QUOTES, "UTF-8") ?>">
+    <input type="hidden" id="ext_ref" name="ext_ref" value="<?= htmlspecialchars($pid, ENT_QUOTES, "UTF-8") ?>">
+    <input type="hidden" id="origin" name="origin" value="<?= htmlspecialchars($originParam, ENT_QUOTES, "UTF-8") ?>">
+    <input type="hidden" id="ai_group" name="ai_group" value="<?= htmlspecialchars($aiGroup, ENT_QUOTES, "UTF-8") ?>">
     <button type="submit" class="btn btn-default" id="submit-btn">Continue</button>
 </form>
 
@@ -59,4 +62,4 @@
 
 <script src="https://www.google.com/recaptcha/api.js" async defer></script>
 
-<html>
+</html>

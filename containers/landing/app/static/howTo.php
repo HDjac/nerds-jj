@@ -57,15 +57,27 @@ If you are unable to complete a task, click <b>Skip Task</b>. We still appreciat
 
 <h2>AI Tool Use</h2>
 
-<p>
-Follow the instructions provided for your assigned study condition.
-</p>
+<?php if (isset($aiGroup) && $aiGroup === "AI"): ?>
+    <p>
+        You are assigned to the <b>AI</b> condition. You may use the built-in browser
+        and AI tools available inside the study environment while completing the tasks.
+        Do not use tools outside the study environment.
+    </p>
+<?php elseif (isset($aiGroup) && $aiGroup === "NON_AI"): ?>
+    <p>
+        You are assigned to the <b>Non-AI</b> condition. You may use the built-in browser for
+        documentation and web searches, but you may not use AI assistants, including ChatGPT,
+        Copilot, Gemini, Claude, or similar tools.
+    </p>
 
-<p>
-If your instructions say that AI tools are not allowed, do not use AI tools during the study.
-Using AI tools when they are not allowed may disqualify you from payment.
-</p>
-
+    <p>
+        <b>Using AI tools when they are not allowed will disqualify you from payment.</b>
+    </p>
+<?php else: ?>
+    <p>
+        Your study condition could not be determined. Please contact the study administrator.
+    </p>
+<?php endif; ?>
 
 <p>Please wait while we start your editor, this will only take a couple of seconds. You can start as soon as the button shows <b>Start Study</b>.</p>
         </div>

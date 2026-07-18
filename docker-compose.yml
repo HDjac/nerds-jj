@@ -22,6 +22,8 @@ services:
       - redis
     networks:
       - main
+    volumes:
+      - ${STUDY_DATA_DIR:-./study-data}:/study-data
 
   db:
     build: ./containers/postgres
