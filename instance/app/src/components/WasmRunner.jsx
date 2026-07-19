@@ -1,8 +1,5 @@
 import { useState } from 'react';
 
-var wasm_bindgen;
-const COMPILE_API_ENDPOINT = "../api/compile";
-
 export default function WasmRunner(props) {
   const [stat, setStat] = useState("idle"); // can be idle, wait (compiling), run, or error
   const [lastTime, setLastTime] = useState(0); // Used for timing compilation times
@@ -27,8 +24,8 @@ export default function WasmRunner(props) {
 
   function runWasm(result, compile_time) {
     console.log("Attempting to run wasm file")
-    //code is a javascript string of compiled wasm
-    const code = result["result"];
+    // code is the emscripten-generated javascript with the wasm embedded in it
+    const code = result["js"];
     const compiler_out = result["compiler_output"];
     setLastTime((new Date() - compile_time)/1000);
 
@@ -42,17 +39,26 @@ export default function WasmRunner(props) {
     print("*** Compiler Output ***");
     print(compiler_out);
 
+    if (result["result"] === "error") {
+      setStat("error");
+      return;
+    }
 
-    if (result !== "error") {
-      print("*** Program Output ***");
-      console.debug("Running output.js");
-      setStat("run");
-      try {
-        Function("m", `"use strict"; var Module = m; ${code}`)(module);
-      } catch (e) {
-        console.debug(e);
-      }
+    if (!code) {
+      // Compile-check-only task (e.g. the code review task has no test suite)
+      print("Code compiled successfully. This task has no test suite to run.");
+      setStat("idle");
+      return;
+    }
 
+    print("*** Program Output ***");
+    console.debug("Running compiled output");
+    setStat("run");
+    try {
+      Function("m", `"use strict"; var Module = m; ${code}`)(module);
+    } catch (e) {
+      console.debug(e);
+      setStat("idle");
     }
   }
 

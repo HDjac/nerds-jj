@@ -164,7 +164,9 @@ function App() {
 
   function compile_code(code) {
     submit_code("r");
-    return compile({code: code, taskno: taskno});
+    // Send the task's stable task_no, not its position in the (shuffled)
+    // task list, so the backend compiles against the right task's tests.
+    return compile({code: code, taskno: task.task_no});
   }
 
   /* Setup error handlers */

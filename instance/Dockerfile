@@ -32,11 +32,13 @@ COPY ./firefox-policies/policies.json /usr/lib/firefox-esr/distribution/policies
 RUN useradd -m --shell=/usr/bin/nologin user
 WORKDIR /home/user
 
-# Setup EMSDK
+# Setup EMSDK. emcc finds its bundled node via /emsdk/.emscripten, so no
+# node paths need to be hardcoded here. EM_CACHE points at a directory the
+# unprivileged user can write to, since /emsdk is root-owned.
 COPY --from=emscripten/emsdk /emsdk /emsdk
 ENV EMSDK=/emsdk \
-    EMSDK_NODE=/emsdk/node/14.18.2_64bit/bin/node \
-    PATH="/emsdk:/emsdk/upstream/emscripten:/emsdk/upstream/bin:/emsdk/node/14.18.2_64bit/bin:${PATH}"
+    EM_CACHE=/home/user/.emscripten_cache \
+    PATH="/emsdk:/emsdk/upstream/emscripten:/emsdk/upstream/bin:${PATH}"
 
 #ADD https://deb.nodesource.com/setup_16.x /home/user/
 #RUN bash setup_16.x && apt-get install -y nodejs
@@ -59,12 +61,22 @@ COPY --chown=user:user ./audio-proxy.sh .
 COPY ./token.cfg /etc/websockify/token.cfg
 
 COPY --chown=user:user ./testing ./testing
+# Starting code for the three coding tasks, served by /api/tasks
+COPY --chown=user:user ./read.c ./write.c ./fix.c ./tasks/
 COPY --chown=user:user ./services ./services
+
+# Warm the emscripten cache (system libs for the exact flags /api/compile
+# uses) so the first user-triggered compile doesn't take minutes.
+RUN emcc -I testing tasks/read.c testing/test_username.c -o /tmp/warmup.js \
+    -std=c11 -fsanitize=undefined -fsanitize-minimal-runtime \
+    -sSINGLE_FILE=1 -sEXIT_RUNTIME=1 -sSAFE_HEAP=1 -sASSERTIONS=1 \
+    -sENVIRONMENT=web \
+    "-sINCOMING_MODULE_JS_API=print,printErr,onExit,onAbort" \
+    && rm /tmp/warmup.js
 #COPY --chown=user:user ./app/ ./app/
 #WORKDIR /home/user/app
 COPY --chown=user:user ./firefox.py .
 COPY --chown=user:user ./instance-api.py .
-RUN mkdir ./tasks
 COPY ./config.py .
 COPY --from=build --chown=user:user /app/build /home/user/www
 #RUN cd /home/user/app && \
