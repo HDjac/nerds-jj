@@ -1,0 +1,25 @@
+{
+  "tasks": [
+    {
+      "placeholder_code": "#include <stdio.h>\n#include <string.h>\n\nint process_username(const char *username) {\n    char buffer[16];\n\n    strcpy(buffer, username);\n\n    printf(\"Username: %s\\n\", buffer);\n    return 0;\n}\n",
+      "desc": "<h1>Read: and Identify Issues</h1><p>You are given a C function intended to process a user-provided username.</p><p>Your job is to identify correctness and security issues in the code. Add inline comments directly in the code explaining the issues you find and how they could be improved. Do not modify the behavior of the code.</p><p>The function should safely process a username using a fixed-size local buffer. It should accept only alphanumeric usernames, reject usernames that are too long for the buffer, and behave securely for unexpected or malicious input.</p>",
+      "task_no": 1
+    },
+    {
+      "placeholder_code": "#include <stdio.h>\n#include <string.h>\n#include <ctype.h>\n\nint process_username(const char *username) {\n    char buffer[16];\n\n    if (strlen(username) > 16) {\n        return -1;\n    }\n\n    for (int i = 0; i < strlen(username); i++) {\n        if (!isalnum(username[i])) {\n            return -1;\n        }\n    }\n\n    strncpy(buffer, username, 16);\n\n    printf(\"Username: %s\\n\", buffer);\n    return 0;\n}\n",
+      "desc": "<h1>Fix: Existing Code</h1><p>You are given a C function intended to process a user-provided username.</p><p>Modify the function so that it correctly and securely satisfies the requirements. You may change any part of the function as needed, but preserve the intended functionality.</p><p>After making your changes, add brief inline comments explaining what you changed and why your changes improve correctness or security.</p><p>The function should use a fixed-size local buffer, accept only alphanumeric usernames, reject usernames that are too long for the buffer, handle unexpected input safely, and return 0 on success or -1 on failure.</p>",
+      "task_no": 2
+    },
+    {
+      "placeholder_code": "#include <stdio.h>\n#include <string.h>\n#include <ctype.h>\n\nint process_username(const char *username) {\n    char buffer[16];\n\n    // Write your implementation here.\n\n}\n",
+      "desc": "<h1>Write: Code From Scratch</h1><p>Write a C function that processes a user-provided username according to the requirements.</p><p>Your function should use a fixed-size local buffer named <code>buffer</code> with size 16. It should reject NULL input, reject empty usernames, reject usernames that are too long for the buffer, accept only alphanumeric usernames, safely copy valid usernames into the buffer, and return 0 on success or -1 on failure.</p><p>After writing your function, add brief inline comments explaining why your implementation is correct and how it handles input securely.</p>",
+      "task_no": 3
+    },
+    {
+      "placeholder_code": "",
+      "fixed": true,
+      "desc": "You have finished all of the tasks. Click finish below to take a quick exit survey.",
+      "task_no": 4
+    }
+  ]
+}

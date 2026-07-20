@@ -9,6 +9,20 @@ define('__DIR__', dirname(__FILE__));
 require_once(__DIR__."/../webpageConf/config.php");
 require_once('util.php');
 
+// function to generate participant condition
+function getAiGroupFromExtRef($ext_ref) {
+    $ext_ref = trim((string)$ext_ref);
+
+    if (!preg_match('/^\d+$/', $ext_ref)) {
+        return "UNKNOWN";
+    }
+
+    $participantId = intval($ext_ref);
+
+    return ($participantId % 2 === 0) ? "AI" : "NON_AI";
+}
+
+
 if(studyLimitReached()){
     $webpageMessageHeader = "Study is over";
     $webpageMessage = "Thank you for your interest! We have already received the maximum number of participants for this study.";
@@ -26,10 +40,15 @@ if (checkMobile($useragent)) {
     die();
 }
 
-//$pid = htmlspecialchars($_GET['pid']);
-$pid = htmlspecialchars($_GET['ext_ref']);
-//$originParam = htmlspecialchars($_GET["origin"]);
-$originParam = htmlspecialchars($_GET["custom1"]);
+// Accept participant ID from QuestionPro-style ext_ref.
+// Fall back to pid only for backwards compatibility with older NERDS flows.
+$rawExtRef = $_GET["ext_ref"] ?? $_GET["pid"] ?? "";
+$pid = htmlspecialchars($rawExtRef, ENT_QUOTES, "UTF-8");
+
+// Optional origin/custom field from QuestionPro.
+// If missing, default to 0.
+$originParam = $_GET["custom1"] ?? $_GET["origin"] ?? "0";
+$originParam = htmlspecialchars($originParam, ENT_QUOTES, "UTF-8");
 
 try {
     // Connect to database
@@ -86,6 +105,12 @@ if(!checkPid($pid)) {
     die();
 }
 
+// AI vs Non-AI assignment for display/logging.
+// This is separate from NERDS' internal numeric condition system.
+$aiGroup = getAiGroupFromExtRef($pid);
+
+// Optional compatibility if any older page still expects $condition.
+$condition = $aiGroup;
 
 include("static/intro.php");
 ?>

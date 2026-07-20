@@ -14,6 +14,22 @@ $token2 = generateAlphanumeric(12);
 $originParam = htmlspecialchars($_POST["origin"]);
 $remoteIp = get_ip();
 
+// function to generate participant condition
+function getAiGroupFromExtRef($ext_ref) {
+    $ext_ref = trim((string)$ext_ref);
+
+    if (!preg_match('/^\d+$/', $ext_ref)) {
+        return "UNKNOWN";
+    }
+
+    $participantId = intval($ext_ref);
+
+    return ($participantId % 2 === 0) ? "AI" : "NON_AI";
+}
+
+$aiGroup = getAiGroupFromExtRef($token);
+$condition = $aiGroup; // optional compatibility for static/howTo.php
+
 if(!checkPid($token)) {
     $webpageMessageHeader = "No participant ID found";
     $webpageMessage = "You must access this site with a participant ID.";

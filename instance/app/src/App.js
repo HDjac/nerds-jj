@@ -17,34 +17,80 @@ function App() {
   const [connStatus, setConnStatus] = useState(false);
   const [taskno, set_taskno] = useSavedState("taskno", 0);
   const [task_list, set_task_list] = useSavedState("task_list", [
-    {placeholder_code:"pub fn print(&self) {\n\n}",desc:"<h1 id=\"add-item\">Print List</h1>",task_no:1},
-    {placeholder_code:"pub fn insert_at(&mut self, item: I, position: usize) -> Result<String, ()> {\n\n}",desc:"<h1 id=\"update-item\">Update item</h1>",task_no:2},
-    {placeholder_code:"pub fn remove(&mut self, position: usize) -> Result<String, Box<LinkedListNode<I>>> {\n\n}",desc:"<h1 id=\"remove-item\">Remove item</h1>",task_no:3},
-    {placeholder_code:"pub fn swap(&mut self, a: usize, b: usize) -> Result<String, ()> {\n\n}",desc:"<h1>Swap Items</h1>",task_no:4},
-    {placeholder_code:"","fixed":true,desc:"You have finished all of the tasks. Click finish below to take a quick exit survey.",task_no:5}
+    {
+    title: "Loading...",
+    desc: "Loading task...",
+    placeholder_code: "",
+    fixed: true,
+    task_no: 0
+    }
   ]);
+
+    //Default tasks to put into array if array is empty it should pull from tasks.json
+    //{placeholder_code:"pub fn print(&self) {\n\n}",desc:"<h1 id=\"add-item\">Print List</h1>",task_no:1},
+    //{placeholder_code:"pub fn insert_at(&mut self, item: I, position: usize) -> Result<String, ()> {\n\n}",desc:"<h1 id=\"update-item\">Update item</h1>",task_no:2},
+    //{placeholder_code:"pub fn remove(&mut self, position: usize) -> Result<String, Box<LinkedListNode<I>>> {\n\n}",desc:"<h1 id=\"remove-item\">Remove item</h1>",task_no:3},
+    //{placeholder_code:"pub fn swap(&mut self, a: usize, b: usize) -> Result<String, ()> {\n\n}",desc:"<h1>Swap Items</h1>",task_no:4},
+    //{placeholder_code:"","fixed":true,desc:"You have finished all of the tasks. Click finish below to take a quick exit survey.",task_no:5}
+
   const [outputs, set_outputs] = useSavedState("output", ["", "", "", "", "", ""])
   //const [output, set_output] = useTaskState("output", taskno, "");
   const [editorValues, setEditorValues] = useSavedState("editorValue", task_list.map(t => t.placeholder_code));
 
-  const task = task_list[taskno];
 
-  // pseudo state for value in state array
-  const editor_value = editorValues[taskno];
+  const task = task_list[taskno] || {
+    title: "Loading...",
+    desc: "Loading task...",
+    placeholder_code: "",
+    fixed: true,
+    task_no: taskno
+  };
+
+  //pseudo state for value in state array
+  const editor_value = editorValues[taskno] || "";
+
+
+
   const set_editor_value = new_value => {
     setEditorValues(
       editorValues.map((item, i) => (i===taskno) ? new_value: item)
     )
   }
-  if (task.placeholder_code != "" && (editor_value==null || editor_value=="")) {
-    set_editor_value(task.placeholder_code)
-  }
+
+
+  useEffect(() => {
+    if (task.placeholder_code !== "" && (editor_value == null || editor_value === "")) {
+      set_editor_value(task.placeholder_code);
+    }
+  }, [taskno, task_list]);
+
+  
+  useEffect(() => {
+    if (task_list.length > 0 && editorValues.length !== task_list.length) {
+      setEditorValues(task_list.map(t => t.placeholder_code || ""));
+    }
+  }, [task_list]);
+
+  useEffect(() => {
+    if (task_list.length > 0 && outputs.length !== task_list.length) {
+      set_outputs(task_list.map(() => ""));
+    }
+  }, [task_list]);
+
+
+
 
   const output = outputs[taskno];
   const set_output = new_value => {
-    new_value = new_value ?? ""
-    set_outputs(
-      outputs.map((item, i) => (i===taskno) ? new_value : item)
+    // Supports both plain values and functional updates (WasmRunner passes
+    // updater functions), and updates against the latest outputs array so
+    // rapid successive prints append instead of clobbering each other.
+    set_outputs(outputs =>
+      outputs.map((item, i) => {
+        if (i !== taskno) return item;
+        const resolved = typeof new_value === "function" ? new_value(item ?? "") : new_value;
+        return resolved ?? "";
+      })
     )
   }
 
@@ -124,7 +170,9 @@ function App() {
 
   function compile_code(code) {
     submit_code("r");
-    return compile({code: code, taskno: taskno});
+    // Send the task's stable task_no, not its position in the shuffled
+    // task list, so the backend compiles against the right task's tests
+    return compile({code: code, taskno: task.task_no});
   }
 
   /* Setup error handlers */

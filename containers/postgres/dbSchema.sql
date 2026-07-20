@@ -1,6 +1,6 @@
-CREATE USER created_instances_user WITH PASSWORD '%pwUser1%';
-CREATE USER insert_user WITH PASSWORD '%pwUser2%';
-CREATE USER read_only_user WITH PASSWORD '%pwUser3%';
+CREATE USER created_instances_user WITH PASSWORD 'oSYcoJcasKmtDZa2EAhM3igiSqrGrUtD';
+CREATE USER insert_user WITH PASSWORD 'paIvTiE0vevzF56eDYkBfGmc12QDsyae';
+CREATE USER read_only_user WITH PASSWORD 'MKTL7RYymrfwLAZQnQI3gXBUZwyd2Qpn';
 
 CREATE TABLE IF NOT EXISTS "createdInstances" (
     id serial primary key,

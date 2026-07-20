@@ -32,16 +32,31 @@ export default function TaskController(props) {
   const max_taskno = task_list.length;
   
   let task_desc = "Loading...";
-  if (max_taskno !== 0) {
-    task_desc = task_list[taskno].desc;
-  }
+  const currentTask = task_list[taskno];
 
+  if (currentTask && currentTask.desc) {
+    task_desc = currentTask.desc;
+  }
+  
   // Function to handle getting new tasks and setting correct task
   useEffect(() => {
-    if (task_list.length == 0) {
+    //changed from ==0 to 1 and loading task
+    if (task_list.length == 1 && task_list[0].title === "Loading...") {
       get_tasks().then((json) => {
+        //separate finish task from coding tasks
+        const finishTask = json.tasks.find(t => t.fixed === true);
+        const codingTasks = json.tasks.filter(t => !t.fixed);
 
-        set_task_list(json.tasks);
+        // Shuffle only the coding tasks
+        const shuffledTasks = shuffleArray(codingTasks);
+
+        // Put the finish task back at the end
+        if (finishTask) {
+          shuffledTasks.push(finishTask);
+        }
+
+    set_task_list(shuffledTasks);
+        //set_task_list(json.tasks);
 
         /*
         if (cookieIsSet("taskNumber")) {
@@ -53,10 +68,14 @@ export default function TaskController(props) {
   }, []);
 
   function handleIncr(increment, submitCode) {
-    set_taskno(taskno => taskno + increment);
-    /*set_current(0);
-    props.set_confirmed(false);*/
+    const nextTaskNo = taskno + increment;
+
+  if (nextTaskNo < 0 || nextTaskNo >= max_taskno) {
+    return;
+  }
+
     props.submit(submitCode);
+    set_taskno(nextTaskNo);
   }
 
   function handlePrev() {
@@ -64,11 +83,23 @@ export default function TaskController(props) {
   }
 
   function handleNext() {
-    handleIncr(1, "n");
+    const confirmed = window.confirm(
+      "Are you sure you want to move to the next task? You will not be able to return to this task."
+  );
+
+  if (!confirmed) return;
+
+  handleIncr(1, "n");
   }
 
   function handleSkip() {
-    handleIncr(1, "s");
+    const confirmed = window.confirm(
+      "Are you sure you want to skip this task? You will not be able to return to it."
+  );
+
+  if (!confirmed) return;
+
+  handleIncr(1, "s");
   }
   
   function handleFinish() {
@@ -80,7 +111,7 @@ export default function TaskController(props) {
   if (taskno === 0) {
     taskButtons = (
       <>
-        <button onClick={handlePrev} disabled>Prev task</button>
+
         <button onClick={handleSkip}>Skip task</button>
         <button onClick={handleNext}>Next task</button>
       </>
@@ -88,7 +119,7 @@ export default function TaskController(props) {
   } else if (taskno !== max_taskno-1) {
     taskButtons = (
       <>
-        <button onClick={handlePrev}>Prev task</button>
+
         <button onClick={handleSkip}>Skip task</button>
         <button onClick={handleNext}>Next task</button>
       </>
@@ -96,7 +127,7 @@ export default function TaskController(props) {
   } else {
     taskButtons = (
       <>
-        <button onClick={handlePrev}>Prev task</button>
+
         <button onClick={handleFinish}>Finish</button>
       </>
     );
@@ -105,7 +136,7 @@ export default function TaskController(props) {
   return (
     <div id="taskWindow">
       <div id="task">
-        <h3>Task {taskno}</h3>
+        <h3>Task {taskno + 1}</h3>
         <div dangerouslySetInnerHTML={{"__html":task_desc}}></div>
       </div>
       <div id="taskButtons">
