@@ -235,7 +235,7 @@ function handleEditorDidMount(editor, monaco) {
           taskno={props.taskno} />
       </div>
       <Editor
-        language={"Rust"}
+        language={"c"}
         options={{domReadOnly: false, readOnly: false}}
         path={`task${props.taskno}`}
         defaultValue={editorValue}

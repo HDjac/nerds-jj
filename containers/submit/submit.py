@@ -115,6 +115,29 @@ class CopyPastedCode(db.Model):
         self.cellid = cellid
         self.code = code
 
+class LlmPrompts(db.Model):
+    """ Model for LLM prompts logged by the in-instance browser extension """
+    __tablename__ = "llm_prompts"
+    id = db.Column(db.Integer, primary_key=True)
+    userid = db.Column(db.String())
+    token = db.Column(db.String())
+    service = db.Column(db.String())
+    model = db.Column(db.String())
+    prompt = db.Column(db.String())
+    url = db.Column(db.String())
+    client_timestamp = db.Column(db.String())
+    time = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+    def __init__(self, userid, token, service, model, prompt, url, client_timestamp):
+        self.userid = userid
+        self.token = token
+        self.service = service
+        self.model = model
+        self.prompt = prompt
+        self.url = url
+        self.client_timestamp = client_timestamp
+
+
 @app.errorhandler(404)
 def not_found(error):
     return make_response(jsonify({'error': 'Not found'}), 404)
@@ -190,6 +213,10 @@ def submit():
                     db.session.commit()
                 elif (jsonPayload['type'] == 'code'):
                     row = Jupyter(jsonPayload['user_id'], jsonPayload['token'], jsonPayload['code'], jsonPayload['time'], jsonPayload['status'])
+                    db.session.add(row)
+                    db.session.commit()
+                elif (jsonPayload['type'] == 'llm_prompt'):
+                    row = LlmPrompts(jsonPayload['user_id'], jsonPayload['token'], jsonPayload.get('service'), jsonPayload.get('model'), jsonPayload.get('prompt'), jsonPayload.get('url'), jsonPayload.get('client_timestamp'))
                     db.session.add(row)
                     db.session.commit()
             else:

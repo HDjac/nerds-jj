@@ -82,9 +82,15 @@ function App() {
 
   const output = outputs[taskno];
   const set_output = new_value => {
-    new_value = new_value ?? ""
-    set_outputs(
-      outputs.map((item, i) => (i===taskno) ? new_value : item)
+    // Supports both plain values and functional updates (WasmRunner passes
+    // updater functions), and updates against the latest outputs array so
+    // rapid successive prints append instead of clobbering each other.
+    set_outputs(outputs =>
+      outputs.map((item, i) => {
+        if (i !== taskno) return item;
+        const resolved = typeof new_value === "function" ? new_value(item ?? "") : new_value;
+        return resolved ?? "";
+      })
     )
   }
 
@@ -164,7 +170,9 @@ function App() {
 
   function compile_code(code) {
     submit_code("r");
-    return compile({code: code, taskno: taskno});
+    // Send the task's stable task_no, not its position in the shuffled
+    // task list, so the backend compiles against the right task's tests
+    return compile({code: code, taskno: task.task_no});
   }
 
   /* Setup error handlers */
