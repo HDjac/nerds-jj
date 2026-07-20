@@ -4,7 +4,6 @@ import os
 import json
 import tempfile
 import urllib.request as url_request
-import psycopg2
 from flask import Flask, request, redirect, make_response, jsonify, abort
 from subprocess import run, PIPE, STDOUT, CalledProcessError, TimeoutExpired
 from datetime import datetime
@@ -64,17 +63,6 @@ def setup():
     else:
         abort(400)
 
-def get_user_data():
-    """Return (user_id, token) for this participant, mirroring send_recv_data."""
-    if os.path.isfile(CONFIG.USER_DATA_FILE):
-        with open(CONFIG.USER_DATA_FILE) as data_file:
-            user_data = json.load(data_file)
-            return (
-                user_data.get("user_id", "notfound"),
-                user_data.get("token", "notfound"),
-            )
-    return "notfound", "notfound"
-
 # logging route for LLM prompts (ChatGPT, Claude, Gemini)
 @app.route("/log-llm-prompt", methods=["POST", "OPTIONS"])
 def log_llm_prompt():
@@ -87,32 +75,23 @@ def log_llm_prompt():
 
     try:
         data = request.get_json(force=True)
-        user_id, token = get_user_data()
 
-        # The extension supplies `service` and `model`; default sensibly for
-        # older clients that only send the ChatGPT prompt fields.
-        service = data.get("service") or "chatgpt"
-        model = data.get("model") or "unknown"
-        prompt = data.get("prompt")
-        url = data.get("url")
+        # The instance network can't reach postgres directly, so route the
+        # prompt through nginx to the submit service like every other
+        # submission; send_recv_data fills in user_id and token.
         client_timestamp = data.get("timestamp")
-
-        conn = psycopg2.connect(**CONFIG.PROMPT_LOG_CONFIG)
-        try:
-            with conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        INSERT INTO "llm_prompts"
-                            (userid, token, service, model, prompt, url,
-                             client_timestamp, "time")
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, now())
-                        """,
-                        (user_id, token, service, model, prompt, url,
-                         client_timestamp),
-                    )
-        finally:
-            conn.close()
+        payload = {
+            "type": "llm_prompt",
+            # The extension supplies `service` and `model`; default sensibly
+            # for older clients that only send the ChatGPT prompt fields.
+            "service": data.get("service") or "chatgpt",
+            "model": data.get("model") or "unknown",
+            "prompt": data.get("prompt"),
+            "url": data.get("url"),
+            # Stored as character varying
+            "client_timestamp": str(client_timestamp) if client_timestamp is not None else None,
+        }
+        send_recv_data(payload)
 
         response = jsonify({"ok": True})
         response.headers["Access-Control-Allow-Origin"] = "*"
