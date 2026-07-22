@@ -42,6 +42,36 @@ export default function BrowserView(props) {
     }
   }
 
+  function getInternalClipboard() {
+    return (
+      window.__NERDS_INTERNAL_CLIPBOARD__ ||
+      localStorage.getItem("NERDS_INTERNAL_CLIPBOARD") ||
+      ""
+    );
+  }
+
+  function setInternalClipboard(text, source) {
+    if (!text || text.length === 0) {
+      return;
+    }
+
+    window.__NERDS_INTERNAL_CLIPBOARD__ = text;
+    localStorage.setItem("NERDS_INTERNAL_CLIPBOARD", text);
+    localStorage.setItem("NERDS_INTERNAL_CLIPBOARD_SOURCE", source);
+    localStorage.setItem("NERDS_INTERNAL_CLIPBOARD_TS", String(Date.now()));
+
+    console.log(`NERDS internal clipboard saved from ${source}:`, text);
+  }
+
+  function syncInternalClipboardToVnc() {
+    const text = getInternalClipboard();
+
+    if (text && rfbObj.current) {
+      rfbObj.current.clipboardPasteFrom(text);
+      console.log("NERDS internal clipboard sent to VNC");
+    }
+  }
+
   // Initialize audio plugin if needed
   if (!audioPlugin.current) {
     audioPlugin.current = new AudioPlugin();
@@ -64,33 +94,26 @@ export default function BrowserView(props) {
   }
 
   function connect(quiet) {
-    if (rfbStatus != "connected" || rfbStatus != "connecting") {
+    if (rfbStatus !== "connected" && rfbStatus !== "connecting") {
       setRfbStatus("connecting");
 
       let vncURL = `wss://${window.location.host}${window.location.pathname}?token=vnc`;
       if (DEV_MODE) {
         vncURL = `ws://192.168.1.35:82?token=vnc`;
       }
+
       let rfb = new RFB(rfbElement.current, vncURL);
+
       //rfb.scaleViewport = true;
       rfb.resizeSession = true;
       rfb.background = "#494949";
+
       rfb.addEventListener("connect", handleConnect);
       rfb.addEventListener("disconnect", handleDisconnect);
       rfb.addEventListener("clipboard", handleClipboard);
+
       rfbObj.current = rfb;
-
-      rfbObj.current.addEventListener("clipboard", (e) => {
-        const text = e.detail.text;
-
-        if (text && text.length > 0) {
-          window.__NERDS_INTERNAL_CLIPBOARD__ = text;
-          localStorage.setItem("NERDS_INTERNAL_CLIPBOARD", text);
-          console.log("Internal browser clipboard saved:", text);
-        }
-      });
     }
-
   }
 
   const handleDisconnect = (stat) => {
@@ -110,13 +133,15 @@ export default function BrowserView(props) {
     setRfbStatus("connected");
     setAlerted(false);
     startAudio();
+    setTimeout(syncInternalClipboardToVnc, 250);
   }
 
-  const handleClipboard = (stat) => {
+   const handleClipboard = (stat) => {
     debug("Got clipboard event");
     debug(stat.detail);
-    if (stat.detail && navigator.clipboard) {
-      navigator.clipboard.writeText(stat.detail.text);
+
+    if (stat.detail && stat.detail.text) {
+      setInternalClipboard(stat.detail.text, "internal_browser");
     }
   }
 
@@ -161,6 +186,26 @@ export default function BrowserView(props) {
       })
     }
   }, [containerElement, rfbElement]);
+
+    useEffect(() => {
+    if (props.currentTab == "browser" && rfbStatus === "connected") {
+      syncInternalClipboardToVnc();
+    }
+  }, [props.currentTab, rfbStatus]);
+
+  useEffect(() => {
+    function handleInternalClipboardEvent() {
+      if (rfbStatus === "connected") {
+        syncInternalClipboardToVnc();
+      }
+    }
+
+    window.addEventListener("nerds-internal-clipboard", handleInternalClipboardEvent);
+
+    return () => {
+      window.removeEventListener("nerds-internal-clipboard", handleInternalClipboardEvent);
+    };
+  }, [rfbStatus]);
 
   // Setup online listener
   useEffect(() => {
@@ -225,7 +270,11 @@ export default function BrowserView(props) {
 
   return (
     <div className="browserContainer" ref={containerElement}>
-      <div className="viewContainer" ref={rfbElement}>
+      <div
+        className="viewContainer"
+        ref={rfbElement}
+        onMouseDown={syncInternalClipboardToVnc}
+      >
       </div>
     </div>
   );

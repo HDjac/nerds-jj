@@ -50,6 +50,20 @@ function handleEditorDidMount(editor, monaco) {
     );
   }
 
+  function setInternalClipboard(text, source) {
+    internalClipboard = text;
+    window.__NERDS_INTERNAL_CLIPBOARD__ = text;
+    localStorage.setItem("NERDS_INTERNAL_CLIPBOARD", text);
+    localStorage.setItem("NERDS_INTERNAL_CLIPBOARD_SOURCE", source);
+    localStorage.setItem("NERDS_INTERNAL_CLIPBOARD_TS", String(Date.now()));
+
+    window.dispatchEvent(
+      new CustomEvent("nerds-internal-clipboard", {
+        detail: { text, source }
+      })
+    );
+  }
+
   function logEvent(event_type, blocked, extra = {}) {
     props.submit("x", {
       event_type,
@@ -96,26 +110,18 @@ function handleEditorDidMount(editor, monaco) {
     const selection = editor.getSelection();
     const selectedText = editor.getModel().getValueInRange(selection);
 
-    internalClipboard = selectedText;
-    window.__NERDS_INTERNAL_CLIPBOARD__ = selectedText;
-    localStorage.setItem("NERDS_INTERNAL_CLIPBOARD", selectedText);
-
-    navigator.clipboard.writeText(selectedText);
+    setInternalClipboard(selectedText, "code_editor");
 
     logEvent("internal_code_copy", false);
     console.log("Internal code copy saved");
   });
 
-  // Cut from code editor marks clipboard as internal.
+    // Cut from code editor marks clipboard as internal.
   editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
     const selection = editor.getSelection();
     const selectedText = editor.getModel().getValueInRange(selection);
 
-    internalClipboard = selectedText;
-    window.__NERDS_INTERNAL_CLIPBOARD__ = selectedText;
-    localStorage.setItem("NERDS_INTERNAL_CLIPBOARD", selectedText);
-
-    navigator.clipboard.writeText(selectedText);
+    setInternalClipboard(selectedText, "code_editor");
 
     editor.executeEdits("cut", [
       {
@@ -128,19 +134,11 @@ function handleEditorDidMount(editor, monaco) {
     console.log("Internal code cut saved");
   });
 
-  // Keyboard paste: Ctrl+V on Windows/Linux, Cmd+V on Mac.
+    // Keyboard paste: Ctrl+V on Windows/Linux, Cmd+V on Mac.
   editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, async () => {
-    let clipText = "";
-
-    try {
-      clipText = await navigator.clipboard.readText();
-    } catch (err) {
-      console.log("Could not read clipboard", err);
-    }
-
     const allowedText = getAllowedText();
 
-    if (clipText && clipText === allowedText) {
+    if (allowedText) {
       allowNextPaste = true;
 
       const selection = editor.getSelection();
@@ -148,12 +146,15 @@ function handleEditorDidMount(editor, monaco) {
       editor.executeEdits("internal-paste", [
         {
           range: selection,
-          text: clipText
+          text: allowedText
         }
       ]);
 
-      logEvent("internal_paste_allowed", false);
-      console.log("Internal paste allowed");
+      logEvent("internal_paste_allowed", false, {
+        source: "nerds_internal_clipboard"
+      });
+
+      console.log("Internal paste allowed from NERDS clipboard");
       return;
     }
 
