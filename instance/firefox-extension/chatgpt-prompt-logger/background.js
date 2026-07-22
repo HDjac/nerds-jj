@@ -1,13 +1,18 @@
-console.log("[NERDS ChatGPT Logger] background script loaded");
+console.log("[NERDS LLM Logger] background script loaded");
+
+// The NERDS collection server owns this endpoint. It is kept as-is for
+// backward compatibility; the payload now carries `service` and `model`
+// fields so ChatGPT / Claude / Gemini logs can be distinguished server-side.
+const LOG_ENDPOINT = "http://127.0.0.1:60000/log-llm-prompt";
 
 browser.runtime.onMessage.addListener((message) => {
-  console.log("[NERDS ChatGPT Logger] background got message:", message);
+  console.log("[NERDS LLM Logger] background got message:", message);
 
-  if (message.type !== "CHATGPT_PROMPT") {
+  if (message.type !== "LLM_PROMPT") {
     return Promise.resolve({ ok: false, error: "Unknown message type" });
   }
 
-  return fetch("http://127.0.0.1:60000/log-chatgpt-prompt", {
+  return fetch(LOG_ENDPOINT, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -17,7 +22,7 @@ browser.runtime.onMessage.addListener((message) => {
     .then(async (response) => {
       const text = await response.text();
 
-      console.log("[NERDS ChatGPT Logger] log response:", response.status, text);
+      console.log("[NERDS LLM Logger] log response:", response.status, text);
 
       return {
         ok: response.ok,
@@ -26,7 +31,7 @@ browser.runtime.onMessage.addListener((message) => {
       };
     })
     .catch((error) => {
-      console.error("[NERDS ChatGPT Logger] failed to send prompt:", error);
+      console.error("[NERDS LLM Logger] failed to send prompt:", error);
 
       return {
         ok: false,
