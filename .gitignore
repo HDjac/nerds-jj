@@ -1,6 +1,20 @@
 developer-observatory.conf
 backups/
 exports/
+study-data/
 analysis/ignoreids.txt
 instance/tasks
 __pycache__
+
+# Local/generated NERDS files
+config/.secrets
+containers/control/config.py
+containers/landing/webpageConf/config.php
+containers/postgres/
+containers/submit/configSubmit.py
+containers/submit/tasks/
+generator/generated/
+generator/tasks.json.save
+instance/config.py
+manager/manager_config.py
+*.log
