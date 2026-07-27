@@ -72,6 +72,33 @@ export default function BrowserView(props) {
     }
   }
 
+  // translates mac cmd to control due to being in a linux vnc
+  function sendVncCtrlShortcut(key) {
+    if (!rfbObj.current) {
+      return;
+    }
+
+    const lowerKey = key.toLowerCase();
+
+    const keyInfo = {
+      c: { keysym: 0x0063, code: "KeyC" },
+      v: { keysym: 0x0076, code: "KeyV" }
+    }[lowerKey];
+
+    if (!keyInfo) {
+      return;
+    }
+
+    const ctrlKeysym = 0xffe3; // Control_L
+
+    rfbObj.current.sendKey(ctrlKeysym, "ControlLeft", true);
+    rfbObj.current.sendKey(keyInfo.keysym, keyInfo.code, true);
+    rfbObj.current.sendKey(keyInfo.keysym, keyInfo.code, false);
+    rfbObj.current.sendKey(ctrlKeysym, "ControlLeft", false);
+  }
+
+
+
   // Initialize audio plugin if needed
   if (!audioPlugin.current) {
     audioPlugin.current = new AudioPlugin();
@@ -214,6 +241,36 @@ export default function BrowserView(props) {
       window.removeEventListener("online", connect);
     });
   });
+
+  // effect for mac copy paste with cmd to ctrl
+  useEffect(() => {
+    function handleMacCopyPaste(e) {
+      if (props.currentTab !== "browser" || rfbStatus !== "connected") {
+        return;
+      }
+
+      const key = e.key.toLowerCase();
+
+      if (!e.metaKey || e.ctrlKey || (key !== "c" && key !== "v")) {
+        return;
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (key === "v") {
+        syncInternalClipboardToVnc();
+      }
+
+      sendVncCtrlShortcut(key);
+    }
+
+    window.addEventListener("keydown", handleMacCopyPaste, true);
+
+    return () => {
+      window.removeEventListener("keydown", handleMacCopyPaste, true);
+    };
+  }, [props.currentTab, rfbStatus]);
 
   // Setup paste listener
   /* Disabled for now as it does not capture paste events when the noVNC window is focused
