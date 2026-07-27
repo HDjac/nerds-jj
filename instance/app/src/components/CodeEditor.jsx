@@ -1,26 +1,17 @@
 import { useState, useEffect } from 'react';
 import OutputBox from "./OutputBox";
 import WasmRunner from "./WasmRunner";
-import ControlButton from "./ControlButton";
-import useTaskState from "../hooks/useTaskState";
-import useSavedState from "../hooks/useSavedState";
-import {isUndefined} from "../util";
+import { isUndefined } from "../util";
 import "./CodeEditor.css";
 
 import Editor from "@monaco-editor/react";
 
 export default function CodeEditor(props) {
-  // state that we have from props:
-  // suggestions  <array>     snippet suggestions
-  // real_taskno  <int>       task number in the original ordering
-  // output       <string>    the code output
-  // editorRef    <ref>       Reference to the editor instance
   const [output, setOutput] = props.output;
-  const taskno = props.taskno
+  const taskno = props.taskno;
   const editorValue = props.editor_value;
   const setEditorValueBackend = props.set_editor_value;
 
-  /* Used to store if we've loaded the saved state into the monaco model */
   const [loadedArr, setLoadedArr] = useState([]);
   const loaded = isUndefined(loadedArr[taskno]) ? false : loadedArr[taskno];
   const setLoaded = (v) => setLoadedArr(loadedArr => {
@@ -32,180 +23,207 @@ export default function CodeEditor(props) {
     console.error("real_taskno is undefined");
   }
 
-//monaco editor changes to prevent copy and paste from external browser but internal is allowed
+  function handleEditorDidMount(editor, monaco) {
+    console.debug("handleEditorDidMount");
+    props.editorRef.current = editor;
 
-function handleEditorDidMount(editor, monaco) {
-  console.debug("handleEditorDidMount");
-  props.editorRef.current = editor;
+    let internalClipboard = "";
 
-  let internalClipboard = "";
-  let allowNextPaste = false;
+    function getAllowedText() {
+      return (
+        window.__NERDS_INTERNAL_CLIPBOARD__ ||
+        localStorage.getItem("NERDS_INTERNAL_CLIPBOARD") ||
+        internalClipboard ||
+        ""
+      );
+    }
 
-  function getAllowedText() {
-    return (
-      window.__NERDS_INTERNAL_CLIPBOARD__ ||
-      localStorage.getItem("NERDS_INTERNAL_CLIPBOARD") ||
-      internalClipboard ||
-      ""
-    );
-  }
-
-  function setInternalClipboard(text, source) {
-    internalClipboard = text;
-    window.__NERDS_INTERNAL_CLIPBOARD__ = text;
-    localStorage.setItem("NERDS_INTERNAL_CLIPBOARD", text);
-    localStorage.setItem("NERDS_INTERNAL_CLIPBOARD_SOURCE", source);
-    localStorage.setItem("NERDS_INTERNAL_CLIPBOARD_TS", String(Date.now()));
-
-    window.dispatchEvent(
-      new CustomEvent("nerds-internal-clipboard", {
-        detail: { text, source }
-      })
-    );
-  }
-
-  function logEvent(event_type, blocked, extra = {}) {
-    props.submit("x", {
-      event_type,
-      source: "monaco_editor",
-      blocked,
-      timestamp: Date.now(),
-      platform: navigator.platform,
-      user_agent: navigator.userAgent,
-      ...extra
-    });
-  }
-
-  // Catch DOM/browser paste paths, including Mac Cmd+V, right-click paste, and Edit → Paste.
-  const editorDomNode = editor.getDomNode();
-
-  if (editorDomNode) {
-    editorDomNode.addEventListener(
-      "paste",
-      (e) => {
-        const pastedText = e.clipboardData.getData("text/plain");
-        const allowedText = getAllowedText();
-
-        if (pastedText && pastedText === allowedText) {
-          console.log("DOM internal paste allowed");
-          allowNextPaste = true;
-          return;
-        }
-
-        e.preventDefault();
-        e.stopPropagation();
-
-        logEvent("external_dom_paste_blocked", true, {
-          source: "monaco_dom"
-        });
-
-        console.log("External DOM paste blocked");
-      },
-      true
-    );
-  }
-
-  // Copy from code editor marks clipboard as internal.
-  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyC, () => {
-    const selection = editor.getSelection();
-    const selectedText = editor.getModel().getValueInRange(selection);
-
-    setInternalClipboard(selectedText, "code_editor");
-
-    logEvent("internal_code_copy", false);
-    console.log("Internal code copy saved");
-  });
-
-    // Cut from code editor marks clipboard as internal.
-  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyX, () => {
-    const selection = editor.getSelection();
-    const selectedText = editor.getModel().getValueInRange(selection);
-
-    setInternalClipboard(selectedText, "code_editor");
-
-    editor.executeEdits("cut", [
-      {
-        range: selection,
-        text: ""
+    function setInternalClipboard(text, source) {
+      if (!text || text.length === 0) {
+        return;
       }
-    ]);
 
-    logEvent("internal_code_cut", false);
-    console.log("Internal code cut saved");
-  });
+      internalClipboard = text;
+      window.__NERDS_INTERNAL_CLIPBOARD__ = text;
+      localStorage.setItem("NERDS_INTERNAL_CLIPBOARD", text);
+      localStorage.setItem("NERDS_INTERNAL_CLIPBOARD_SOURCE", source);
+      localStorage.setItem("NERDS_INTERNAL_CLIPBOARD_TS", String(Date.now()));
 
-    // Keyboard paste: Ctrl+V on Windows/Linux, Cmd+V on Mac.
-  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, async () => {
-    const allowedText = getAllowedText();
+      window.dispatchEvent(
+        new CustomEvent("nerds-internal-clipboard", {
+          detail: { text, source }
+        })
+      );
+    }
 
-    if (allowedText) {
-      allowNextPaste = true;
+    function logEvent(event_type, blocked, extra = {}) {
+      props.submit("x", {
+        event_type,
+        source: "monaco_editor",
+        blocked,
+        timestamp: Date.now(),
+        platform: navigator.platform,
+        user_agent: navigator.userAgent,
+        ...extra
+      });
+    }
+
+    function getSelectedText() {
+      const selection = editor.getSelection();
+      const model = editor.getModel();
+
+      if (!selection || !model) {
+        return "";
+      }
+
+      return model.getValueInRange(selection);
+    }
+
+    function saveSelectionToInternal(action, source) {
+      const selection = editor.getSelection();
+      const model = editor.getModel();
+
+      if (!selection || !model) {
+        return false;
+      }
+
+      const selectedText = model.getValueInRange(selection);
+
+      if (!selectedText || selectedText.length === 0) {
+        return false;
+      }
+
+      setInternalClipboard(selectedText, "code_editor");
+
+      logEvent(
+        action === "cut" ? "internal_code_cut" : "internal_code_copy",
+        false,
+        { source }
+      );
+
+      console.log(`Internal code ${action} saved from ${source}`);
+
+      if (action === "cut") {
+        editor.executeEdits("internal-cut", [
+          {
+            range: selection,
+            text: ""
+          }
+        ]);
+      }
+
+      return true;
+    }
+
+    function pasteTextIntoEditor(text, source) {
+      if (!text || text.length === 0) {
+        return false;
+      }
 
       const selection = editor.getSelection();
 
       editor.executeEdits("internal-paste", [
         {
           range: selection,
-          text: allowedText
+          text
         }
       ]);
 
       logEvent("internal_paste_allowed", false, {
-        source: "nerds_internal_clipboard"
+        source
       });
 
-      console.log("Internal paste allowed from NERDS clipboard");
-      return;
+      console.log(`Internal paste allowed from ${source}`);
+      return true;
     }
 
-    logEvent("external_keyboard_paste_blocked", true);
-    console.log("External keyboard paste blocked");
-  });
+    const editorDomNode = editor.getDomNode();
 
-    // Mac fallback: explicitly support Cmd+C, Cmd+X, and Cmd+V in Monaco.
-    // Some browsers/noVNC paths do not trigger Monaco CtrlCmd commands consistently.
+    if (editorDomNode) {
+      editorDomNode.addEventListener(
+        "copy",
+        (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          saveSelectionToInternal("copy", "dom_copy");
+        },
+        true
+      );
+
+      editorDomNode.addEventListener(
+        "cut",
+        (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          saveSelectionToInternal("cut", "dom_cut");
+        },
+        true
+      );
+
+      editorDomNode.addEventListener(
+        "paste",
+        (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+
+          const pastedText = e.clipboardData
+            ? e.clipboardData.getData("text/plain")
+            : "";
+
+          const allowedText = getAllowedText();
+
+          if (allowedText && pastedText === allowedText) {
+            pasteTextIntoEditor(allowedText, "dom_internal_clipboard");
+            return;
+          }
+
+          logEvent("external_dom_paste_blocked", true, {
+            source: "monaco_dom"
+          });
+
+          console.log("External DOM paste blocked");
+        },
+        true
+      );
+    }
+
+    // Handles Ctrl+C/Ctrl+X/Ctrl+V and Cmd+C/Cmd+X/Cmd+V.
+    // We do not use navigator.clipboard here because that would touch the user's real clipboard.
     editor.onKeyDown((e) => {
       const browserEvent = e.browserEvent;
 
-      if (!browserEvent || !browserEvent.metaKey || browserEvent.ctrlKey) {
+      if (!browserEvent) {
         return;
       }
 
-      const key = browserEvent.key.toLowerCase();
+      const key = (browserEvent.key || "").toLowerCase();
+      const isClipboardShortcut =
+        (browserEvent.ctrlKey || browserEvent.metaKey) &&
+        !browserEvent.altKey &&
+        (key === "c" || key === "x" || key === "v");
 
-      if (key !== "c" && key !== "x" && key !== "v") {
+      if (!isClipboardShortcut) {
         return;
       }
 
       browserEvent.preventDefault();
       browserEvent.stopPropagation();
+
+      if (typeof browserEvent.stopImmediatePropagation === "function") {
+        browserEvent.stopImmediatePropagation();
+      }
+
       e.preventDefault();
 
-      if (key === "c" || key === "x") {
-        const selection = editor.getSelection();
-        const selectedText = editor.getModel().getValueInRange(selection);
+      if (key === "c") {
+        saveSelectionToInternal("copy", browserEvent.metaKey ? "cmd_c" : "ctrl_c");
+        return;
+      }
 
-        if (!selectedText) {
-          return;
-        }
-
-        setInternalClipboard(selectedText, "code_editor");
-
-        logEvent(key === "c" ? "internal_code_copy" : "internal_code_cut", false, {
-          source: "mac_cmd_fallback"
-        });
-
-        console.log(`Mac Cmd+${key.toUpperCase()} saved to NERDS internal clipboard`);
-
-        if (key === "x") {
-          editor.executeEdits("cut", [
-            {
-              range: selection,
-              text: ""
-            }
-          ]);
-        }
-
+      if (key === "x") {
+        saveSelectionToInternal("cut", browserEvent.metaKey ? "cmd_x" : "ctrl_x");
         return;
       }
 
@@ -213,75 +231,39 @@ function handleEditorDidMount(editor, monaco) {
         const allowedText = getAllowedText();
 
         if (allowedText) {
-          allowNextPaste = true;
-
-          const selection = editor.getSelection();
-
-          editor.executeEdits("internal-paste", [
-            {
-              range: selection,
-              text: allowedText
-            }
-          ]);
-
-          logEvent("internal_paste_allowed", false, {
-            source: "mac_cmd_fallback"
-          });
-
-          console.log("Mac Cmd+V pasted from NERDS internal clipboard");
+          pasteTextIntoEditor(
+            allowedText,
+            browserEvent.metaKey ? "cmd_v_internal_clipboard" : "ctrl_v_internal_clipboard"
+          );
           return;
         }
 
         logEvent("external_keyboard_paste_blocked", true, {
-          source: "mac_cmd_fallback"
+          source: browserEvent.metaKey ? "cmd_v" : "ctrl_v"
         });
 
-        console.log("Mac Cmd+V blocked because no NERDS internal clipboard text exists");
+        console.log("External keyboard paste blocked");
       }
     });
 
-  // Final backup: if anything still pastes, undo it unless it was internal.
-  editor.onDidPaste(async () => {
-    if (allowNextPaste) {
-      allowNextPaste = false;
-      console.log("Allowed internal paste was not undone");
-      return;
-    }
+    // Backup protection: if a native paste somehow gets through Monaco,
+    // immediately undo it.
+    editor.onDidPaste(() => {
+      logEvent("external_paste_undone", true, {
+        source: "monaco_onDidPaste_backup"
+      });
 
-    let clipText = "";
-
-    try {
-      clipText = await navigator.clipboard.readText();
-    } catch (err) {
-      console.log("Could not read clipboard after paste", err);
-    }
-
-    const allowedText = getAllowedText();
-
-    if (clipText && clipText === allowedText) {
-      console.log("Internal paste allowed by onDidPaste");
-      return;
-    }
-
-    logEvent("external_paste_undone", true);
-
-    console.log("External paste undone");
-    editor.trigger("keyboard", "undo", null);
-  });
-}
+      console.log("Unexpected paste detected and undone");
+      editor.trigger("keyboard", "undo", null);
+    });
+  }
 
   function handleBeforeUnload(e) {
     e.preventDefault();
   }
-  
 
   function handleKeyDown(e) {
     if (e.key === "Tab") {
-      //if (e.shiftKey) {
-      //  handlePrev();
-      //} else {
-      //  handleNext();
-      //}
       e.preventDefault();
     }
   }
@@ -291,17 +273,15 @@ function handleEditorDidMount(editor, monaco) {
     setEditorValueBackend(value);
   }
 
-  // Setup listeners
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
     window.addEventListener("beforeunload", handleBeforeUnload);
 
     return (() => {
-      window.removeEventListener("keydown", handleKeyDown)
+      window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("beforeunload", handleBeforeUnload);
     });
   });
-
 
   return (
     <div id="editorContainer">
@@ -311,20 +291,22 @@ function handleEditorDidMount(editor, monaco) {
           output={output}
           setOutput={setOutput}
           compile_code={props.compile_code}
-          taskno={props.taskno} />
+          taskno={props.taskno}
+        />
       </div>
       <Editor
         language={"c"}
-        options={{domReadOnly: false, readOnly: false}}
+        options={{ domReadOnly: false, readOnly: false }}
         path={`task${props.taskno}`}
         defaultValue={editorValue}
         theme="vs-dark"
         onMount={handleEditorDidMount}
         onChange={handleEditorDidChange}
-        wrapperProps={{"style":{"flex":"2 1 400px", "minHeight":"200px", "padding": "0.5em"}}}
+        wrapperProps={{ "style": { "flex": "2 1 400px", "minHeight": "200px", "padding": "0.5em" } }}
         keepCurrentModel={true}
-        className="editorBox" />
-      <OutputBox output={output}/>
+        className="editorBox"
+      />
+      <OutputBox output={output} />
     </div>
-  )
+  );
 }
