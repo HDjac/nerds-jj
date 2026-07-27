@@ -162,6 +162,84 @@ function handleEditorDidMount(editor, monaco) {
     console.log("External keyboard paste blocked");
   });
 
+    // Mac fallback: explicitly support Cmd+C, Cmd+X, and Cmd+V in Monaco.
+    // Some browsers/noVNC paths do not trigger Monaco CtrlCmd commands consistently.
+    editor.onKeyDown((e) => {
+      const browserEvent = e.browserEvent;
+
+      if (!browserEvent || !browserEvent.metaKey || browserEvent.ctrlKey) {
+        return;
+      }
+
+      const key = browserEvent.key.toLowerCase();
+
+      if (key !== "c" && key !== "x" && key !== "v") {
+        return;
+      }
+
+      browserEvent.preventDefault();
+      browserEvent.stopPropagation();
+      e.preventDefault();
+
+      if (key === "c" || key === "x") {
+        const selection = editor.getSelection();
+        const selectedText = editor.getModel().getValueInRange(selection);
+
+        if (!selectedText) {
+          return;
+        }
+
+        setInternalClipboard(selectedText, "code_editor");
+
+        logEvent(key === "c" ? "internal_code_copy" : "internal_code_cut", false, {
+          source: "mac_cmd_fallback"
+        });
+
+        console.log(`Mac Cmd+${key.toUpperCase()} saved to NERDS internal clipboard`);
+
+        if (key === "x") {
+          editor.executeEdits("cut", [
+            {
+              range: selection,
+              text: ""
+            }
+          ]);
+        }
+
+        return;
+      }
+
+      if (key === "v") {
+        const allowedText = getAllowedText();
+
+        if (allowedText) {
+          allowNextPaste = true;
+
+          const selection = editor.getSelection();
+
+          editor.executeEdits("internal-paste", [
+            {
+              range: selection,
+              text: allowedText
+            }
+          ]);
+
+          logEvent("internal_paste_allowed", false, {
+            source: "mac_cmd_fallback"
+          });
+
+          console.log("Mac Cmd+V pasted from NERDS internal clipboard");
+          return;
+        }
+
+        logEvent("external_keyboard_paste_blocked", true, {
+          source: "mac_cmd_fallback"
+        });
+
+        console.log("Mac Cmd+V blocked because no NERDS internal clipboard text exists");
+      }
+    });
+
   // Final backup: if anything still pastes, undo it unless it was internal.
   editor.onDidPaste(async () => {
     if (allowNextPaste) {
