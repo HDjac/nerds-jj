@@ -29,7 +29,6 @@
 
         <p><b>You will have 60 minutes to complete all tasks.</b></p>
 
-        <p><strong>Testing AI group:</strong> <?= htmlspecialchars($aiGroup, ENT_QUOTES, "UTF-8") ?></p>
     </div>
 </div>
 <form id="continue_form" method="post" action="howTo.php">

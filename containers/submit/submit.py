@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import JSON
 import datetime
 import json
 from functools import wraps
+from urllib.parse import urlencode
 from flask import redirect, request, current_app
 
 
@@ -186,16 +187,36 @@ def get_ipynb(userid, token):
 
 @app.route('/survey/<string:userid>/<string:token>')
 def redirectToSurvey(userid, token):
-    row = CreatedInstances.query.filter_by(userid = userid).first()
+    row = CreatedInstances.query.filter_by(userid=userid).first()
     if row == None:
         return 'userid ' + userid + ' does not exist!'
 
     row.finished = True
     db.session.commit()
 
-    url = f'{app.config["FINAL_SURVEY_URL"]}?ext_ref={userid}&custom1={row.origin}'
-    if(not (url.startswith("http://") or url.startswith("https://"))):
-        url = "https://" + url
+    # Use PID parity to recover condition:
+    # even PID = AI, odd PID = NON_AI
+    try:
+        participant_num = int(userid)
+        condition = "AI" if participant_num % 2 == 0 else "NON_AI"
+    except (TypeError, ValueError):
+        condition = "UNKNOWN"
+
+    query_params = {
+        "participant_id": userid,
+        "ext_ref": userid,
+        "condition": condition,
+        "custom1": row.origin
+    }
+
+    base_url = app.config["FINAL_SURVEY_URL"]
+
+    if not (base_url.startswith("http://") or base_url.startswith("https://")):
+        base_url = "https://" + base_url
+
+    separator = "&" if "?" in base_url else "?"
+    url = f"{base_url}{separator}{urlencode(query_params)}"
+
     print(url)
     return redirect(url, code=302)
 
