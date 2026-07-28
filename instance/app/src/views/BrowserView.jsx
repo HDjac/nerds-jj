@@ -1,7 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import RFB from "@novnc/novnc";
 import "./BrowserView.css";
-import ControlButton from "../components/ControlButton";
 import AudioPlugin from "../lib/novnc-audio";
 import { DEV_MODE } from "../util";
 
@@ -13,6 +12,7 @@ export default function BrowserView(props) {
   const containerElement = useRef(null);
   const rfbObj = useRef(null);
 
+  // Can be null, connecting, connected, disconnected, or failed.
   const [rfbStatus, setRfbStatus] = useState(null);
   const [alerted, setAlerted] = useState(false);
   const audioPlugin = useRef(null);
@@ -41,9 +41,21 @@ export default function BrowserView(props) {
     window.__NERDS_INTERNAL_CLIPBOARD__ = text;
     localStorage.setItem("NERDS_INTERNAL_CLIPBOARD", text);
     localStorage.setItem("NERDS_INTERNAL_CLIPBOARD_SOURCE", source);
-    localStorage.setItem("NERDS_INTERNAL_CLIPBOARD_TS", String(Date.now()));
+    localStorage.setItem(
+      "NERDS_INTERNAL_CLIPBOARD_TS",
+      String(Date.now())
+    );
 
-    console.log(`NERDS internal clipboard saved from ${source}:`, text);
+    window.dispatchEvent(
+      new CustomEvent("nerds-internal-clipboard", {
+        detail: { text, source }
+      })
+    );
+
+    console.log(
+      `NERDS internal clipboard saved from ${source}:`,
+      text
+    );
   }
 
   function syncInternalClipboardToVnc() {
@@ -53,8 +65,8 @@ export default function BrowserView(props) {
 
     const text = getInternalClipboard();
 
-    // Send the NERDS internal clipboard into the remote Firefox/Linux clipboard.
-    // If empty, send empty text so a stale remote clipboard is not reused.
+    // Send only the NERDS internal clipboard to remote Firefox.
+    // Sending an empty value also prevents stale remote text from being reused.
     rfbObj.current.clipboardPasteFrom(text || "");
 
     if (text) {
@@ -69,28 +81,58 @@ export default function BrowserView(props) {
       return;
     }
 
-    const lowerKey = key.toLowerCase();
-
     const keyInfo = {
       c: { keysym: 0x0063, code: "KeyC" },
       v: { keysym: 0x0076, code: "KeyV" },
       x: { keysym: 0x0078, code: "KeyX" }
-    }[lowerKey];
+    }[key.toLowerCase()];
 
     if (!keyInfo) {
       return;
     }
 
+    /*
+     * On macOS, noVNC may forward the Cmd key to Linux before this
+     * handler receives Cmd+C, Cmd+X, or Cmd+V. Release all possible
+     * remote Meta/Super keys before generating the Linux Ctrl shortcut.
+     */
+    rfbObj.current.sendKey(0xffe7, "MetaLeft", false);
+    rfbObj.current.sendKey(0xffe8, "MetaRight", false);
+    rfbObj.current.sendKey(0xffeb, "OSLeft", false);
+    rfbObj.current.sendKey(0xffec, "OSRight", false);
+
     const ctrlKeysym = 0xffe3; // Control_L
 
-    rfbObj.current.sendKey(ctrlKeysym, "ControlLeft", true);
-    rfbObj.current.sendKey(keyInfo.keysym, keyInfo.code, true);
-    rfbObj.current.sendKey(keyInfo.keysym, keyInfo.code, false);
-    rfbObj.current.sendKey(ctrlKeysym, "ControlLeft", false);
+    rfbObj.current.sendKey(
+      ctrlKeysym,
+      "ControlLeft",
+      true
+    );
+
+    rfbObj.current.sendKey(
+      keyInfo.keysym,
+      keyInfo.code,
+      true
+    );
+
+    rfbObj.current.sendKey(
+      keyInfo.keysym,
+      keyInfo.code,
+      false
+    );
+
+    rfbObj.current.sendKey(
+      ctrlKeysym,
+      "ControlLeft",
+      false
+    );
   }
 
   function handleBrowserClipboardShortcut(e) {
-    if (props.currentTab !== "browser" || rfbStatus !== "connected") {
+    if (
+      props.currentTab !== "browser" ||
+      rfbStatus !== "connected"
+    ) {
       return;
     }
 
@@ -99,12 +141,16 @@ export default function BrowserView(props) {
     const isClipboardShortcut =
       (e.ctrlKey || e.metaKey) &&
       !e.altKey &&
-      (key === "c" || key === "v" || key === "x");
+      (key === "c" || key === "x" || key === "v");
 
     if (!isClipboardShortcut) {
       return;
     }
 
+    /*
+     * Prevent the host browser and noVNC from processing the original
+     * clipboard shortcut. We will send a controlled shortcut instead.
+     */
     e.preventDefault();
     e.stopPropagation();
 
@@ -113,16 +159,27 @@ export default function BrowserView(props) {
     }
 
     if (key === "v") {
-      // Push only the NERDS internal clipboard into the remote browser.
-      // The delay gives noVNC/remote Firefox time to receive clipboardPasteFrom().
+      /*
+       * Update the remote Linux clipboard twice. The second update
+       * handles cases where focus is changing between the React page,
+       * the noVNC canvas, and remote Firefox.
+       */
       syncInternalClipboardToVnc();
 
       setTimeout(() => {
+        syncInternalClipboardToVnc();
+      }, 150);
+
+      /*
+       * Give remote Firefox time to receive the clipboard value before
+       * sending one Ctrl+V. This should make one Cmd+V produce one paste.
+       */
+      setTimeout(() => {
         sendVncCtrlShortcut("v");
-      }, 200);
+      }, 400);
 
       console.log(
-        `${e.metaKey ? "Cmd" : "Ctrl"}+V translated to remote Ctrl+V using NERDS internal clipboard`
+        `${e.metaKey ? "Cmd" : "Ctrl"}+V queued for the remote browser`
       );
 
       return;
@@ -130,16 +187,24 @@ export default function BrowserView(props) {
 
     if (key === "c") {
       sendVncCtrlShortcut("c");
-      console.log(`${e.metaKey ? "Cmd" : "Ctrl"}+C translated to remote Ctrl+C`);
+
+      console.log(
+        `${e.metaKey ? "Cmd" : "Ctrl"}+C translated to remote Ctrl+C`
+      );
+
       return;
     }
 
     if (key === "x") {
       sendVncCtrlShortcut("x");
-      console.log(`${e.metaKey ? "Cmd" : "Ctrl"}+X translated to remote Ctrl+X`);
+
+      console.log(
+        `${e.metaKey ? "Cmd" : "Ctrl"}+X translated to remote Ctrl+X`
+      );
     }
   }
 
+  // Initialize the audio plugin.
   if (!audioPlugin.current) {
     audioPlugin.current = new AudioPlugin();
     audioPlugin.current.initUi();
@@ -160,30 +225,51 @@ export default function BrowserView(props) {
     }
   }
 
-  function connect(quiet) {
-    if (rfbStatus !== "connected" && rfbStatus !== "connecting") {
-      setRfbStatus("connecting");
-
-      let vncURL = `wss://${window.location.host}${window.location.pathname}?token=vnc`;
-      if (DEV_MODE) {
-        vncURL = `ws://192.168.1.35:82?token=vnc`;
-      }
-
-      let rfb = new RFB(rfbElement.current, vncURL);
-
-      //rfb.scaleViewport = true;
-      rfb.resizeSession = true;
-      rfb.background = "#494949";
-
-      rfb.addEventListener("connect", handleConnect);
-      rfb.addEventListener("disconnect", handleDisconnect);
-      rfb.addEventListener("clipboard", handleClipboard);
-
-      rfbObj.current = rfb;
+  function connect() {
+    if (
+      rfbStatus === "connected" ||
+      rfbStatus === "connecting"
+    ) {
+      return;
     }
+
+    setRfbStatus("connecting");
+
+    let vncURL =
+      `wss://${window.location.host}` +
+      `${window.location.pathname}?token=vnc`;
+
+    if (DEV_MODE) {
+      vncURL = "ws://192.168.1.35:82?token=vnc";
+    }
+
+    const rfb = new RFB(rfbElement.current, vncURL);
+
+    // rfb.scaleViewport = true;
+    rfb.resizeSession = true;
+    rfb.background = "#494949";
+
+    rfb.addEventListener("connect", handleConnect);
+    rfb.addEventListener("disconnect", handleDisconnect);
+    rfb.addEventListener("clipboard", handleClipboard);
+
+    rfbObj.current = rfb;
   }
 
-  const handleDisconnect = (stat) => {
+  function handleConnect() {
+    debug("Connected to browser instance");
+
+    setRfbStatus("connected");
+    setAlerted(false);
+    startAudio();
+
+    // Synchronize any editor text that was copied before connecting.
+    setTimeout(() => {
+      syncInternalClipboardToVnc();
+    }, 250);
+  }
+
+  function handleDisconnect(stat) {
     debug("Handled disconnect");
     stopAudio();
 
@@ -194,79 +280,98 @@ export default function BrowserView(props) {
       debug("Clean disconnect");
       setRfbStatus("disconnected");
     }
-  };
-
-  function handleConnect() {
-    debug("Connected to browser instance");
-    setRfbStatus("connected");
-    setAlerted(false);
-    startAudio();
-
-    setTimeout(syncInternalClipboardToVnc, 250);
   }
 
-  const handleClipboard = (stat) => {
+  function handleClipboard(stat) {
     debug("Got clipboard event");
     debug(stat.detail);
 
-    // Remote Firefox copied/cut something.
-    // Save it only to the NERDS internal clipboard, not navigator.clipboard.
+    /*
+     * Text copied or cut inside remote Firefox is stored only in the
+     * NERDS internal clipboard. It is not written to navigator.clipboard.
+     */
     if (stat.detail && stat.detail.text) {
-      setInternalClipboard(stat.detail.text, "internal_browser");
-    }
-  };
-
-  useEffect(() => {
-    if (!NO_VNC) {
-      connect();
-
-      return () => {
-        if (rfbObj.current) {
-          rfbObj.current.disconnect();
-        }
-
-        debug("disconnected RFB object on unmount");
-      };
-    }
-  }, []);
-
-  function doResize() {
-    if (containerElement.current) {
-      const width = Math.round(containerElement.current.offsetWidth);
-
-      if (width !== 0) {
-        debug(`Setting width to ${width}px`);
-        rfbElement.current.style.width = `${width}px`;
-      }
+      setInternalClipboard(
+        stat.detail.text,
+        "internal_browser"
+      );
     }
   }
 
+  // Create the initial VNC connection.
   useEffect(() => {
-    if (props.currentTab === "browser" && containerElement.current) {
+    if (NO_VNC) {
+      return undefined;
+    }
+
+    connect();
+
+    return () => {
+      if (rfbObj.current) {
+        rfbObj.current.disconnect();
+      }
+
+      debug("Disconnected RFB object on unmount");
+    };
+  }, []);
+
+  function doResize() {
+    if (!containerElement.current || !rfbElement.current) {
+      return;
+    }
+
+    const width = Math.round(
+      containerElement.current.offsetWidth
+    );
+
+    if (width !== 0) {
+      debug(`Setting width to ${width}px`);
+      rfbElement.current.style.width = `${width}px`;
+    }
+  }
+
+  // Resize when the Browser tab becomes visible.
+  useEffect(() => {
+    if (
+      props.currentTab === "browser" &&
+      containerElement.current
+    ) {
       doResize();
     }
-  }, [props.currentTab, containerElement, rfbElement]);
+  }, [props.currentTab]);
 
+  // Resize when the outer browser container changes size.
   useEffect(() => {
     const observer = new ResizeObserver(doResize);
+    const container = containerElement.current;
 
-    if (containerElement.current) {
-      observer.observe(containerElement.current);
-
-      return (() => {
-        if (containerElement.current) {
-          observer.unobserve(containerElement.current);
-        }
-      });
+    if (container) {
+      observer.observe(container);
     }
-  }, [containerElement, rfbElement]);
 
+    return () => {
+      if (container) {
+        observer.unobserve(container);
+      }
+
+      observer.disconnect();
+    };
+  }, []);
+
+  // Synchronize the internal clipboard when switching to Browser.
   useEffect(() => {
-    if (props.currentTab === "browser" && rfbStatus === "connected") {
+    if (
+      props.currentTab === "browser" &&
+      rfbStatus === "connected"
+    ) {
       syncInternalClipboardToVnc();
     }
   }, [props.currentTab, rfbStatus]);
 
+  /*
+   * Receive clipboard updates from CodeEditor. This lets copied editor
+   * text reach the VNC clipboard before the user presses Cmd+V.
+   */
   useEffect(() => {
     function handleInternalClipboardEvent() {
       if (rfbStatus === "connected") {
@@ -274,38 +379,54 @@ export default function BrowserView(props) {
       }
     }
 
-    window.addEventListener("nerds-internal-clipboard", handleInternalClipboardEvent);
+    window.addEventListener(
+      "nerds-internal-clipboard",
+      handleInternalClipboardEvent
+    );
 
     return () => {
-      window.removeEventListener("nerds-internal-clipboard", handleInternalClipboardEvent);
+      window.removeEventListener(
+        "nerds-internal-clipboard",
+        handleInternalClipboardEvent
+      );
     };
   }, [rfbStatus]);
 
+  // Attempt to reconnect when the local device returns online.
   useEffect(() => {
-    window.addEventListener("online", connect);
-
-    return (() => {
-      window.removeEventListener("online", connect);
-    });
-  });
-
-  useEffect(() => {
-    window.addEventListener("keydown", handleBrowserClipboardShortcut, true);
-
-    const node = rfbElement.current;
-    if (node) {
-      node.addEventListener("keydown", handleBrowserClipboardShortcut, true);
+    function handleOnline() {
+      connect();
     }
 
-    return () => {
-      window.removeEventListener("keydown", handleBrowserClipboardShortcut, true);
+    window.addEventListener("online", handleOnline);
 
-      if (node) {
-        node.removeEventListener("keydown", handleBrowserClipboardShortcut, true);
-      }
+    return () => {
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [rfbStatus]);
+
+  /*
+   * Register the shortcut handler only once on window for each relevant
+   * state change. Do not also register it on rfbElement, because that can
+   * cause the same shortcut to be processed twice.
+   */
+  useEffect(() => {
+    window.addEventListener(
+      "keydown",
+      handleBrowserClipboardShortcut,
+      true
+    );
+
+    return () => {
+      window.removeEventListener(
+        "keydown",
+        handleBrowserClipboardShortcut,
+        true
+      );
     };
   }, [props.currentTab, rfbStatus]);
 
+  // Report connection changes and attempt reconnects.
   useEffect(() => {
     debug(`New RFB state: ${rfbStatus}`);
     props.setConnStatus(rfbStatus === "connected");
@@ -315,19 +436,21 @@ export default function BrowserView(props) {
       connect();
     } else if (rfbStatus === "failed" && !alerted) {
       setAlerted(true);
-      alert("You have been disconnected from the study infrastructure. Please "
-        + "check your internet connection and reconnect. If you believe this "
-        + "is an error, please contact the study administrators.");
+
+      alert(
+        "You have been disconnected from the study infrastructure. " +
+        "Please check your internet connection and reconnect. " +
+        "If you believe this is an error, please contact the study " +
+        "administrators."
+      );
     }
   }, [rfbStatus, alerted]);
 
-  let reconButton = (<ControlButton disabled={true} title="Reconnect" />);
-  if (rfbStatus === "disconnected") {
-    reconButton = (<ControlButton onClick={connect} title="Reconnect" />);
-  }
-
   return (
-    <div className="browserContainer" ref={containerElement}>
+    <div
+      className="browserContainer"
+      ref={containerElement}
+    >
       <div
         className="viewContainer"
         ref={rfbElement}
