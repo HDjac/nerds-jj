@@ -77,7 +77,9 @@ export default function BrowserView(props) {
   }
 
   function sendVncCtrlShortcut(key) {
-    if (!rfbObj.current) {
+    const rfb = rfbObj.current;
+
+    if (!rfb) {
       return;
     }
 
@@ -91,41 +93,38 @@ export default function BrowserView(props) {
       return;
     }
 
-    /*
-     * On macOS, noVNC may forward the Cmd key to Linux before this
-     * handler receives Cmd+C, Cmd+X, or Cmd+V. Release all possible
-     * remote Meta/Super keys before generating the Linux Ctrl shortcut.
-     */
-    rfbObj.current.sendKey(0xffe7, "MetaLeft", false);
-    rfbObj.current.sendKey(0xffe8, "MetaRight", false);
-    rfbObj.current.sendKey(0xffeb, "OSLeft", false);
-    rfbObj.current.sendKey(0xffec, "OSRight", false);
+  /*
+   * Reset noVNC keyboard tracking. On macOS, noVNC can translate
+   * the Cmd/Super key into remote Alt, so Meta/Super releases alone
+   * are insufficient.
+   */
+    rfb.blur();
 
-    const ctrlKeysym = 0xffe3; // Control_L
+    const modifiers = [
+      0xffe1, // Shift_L
+      0xffe2, // Shift_R
+      0xffe3, // Control_L
+      0xffe4, // Control_R
+      0xffe7, // Meta_L
+      0xffe8, // Meta_R
+      0xffe9, // Alt_L
+      0xffea, // Alt_R
+      0xffeb, // Super_L
+      0xffec  // Super_R
+    ];
 
-    rfbObj.current.sendKey(
-      ctrlKeysym,
-      "ControlLeft",
-      true
-    );
+    modifiers.forEach((keysym) => {
+      rfb.sendKey(keysym, null, false);
+    });
 
-    rfbObj.current.sendKey(
-      keyInfo.keysym,
-      keyInfo.code,
-      true
-    );
+    rfb.focus();
 
-    rfbObj.current.sendKey(
-      keyInfo.keysym,
-      keyInfo.code,
-      false
-    );
+    const ctrlKeysym = 0xffe3;
 
-    rfbObj.current.sendKey(
-      ctrlKeysym,
-      "ControlLeft",
-      false
-    );
+    rfb.sendKey(ctrlKeysym, "ControlLeft", true);
+    rfb.sendKey(keyInfo.keysym, keyInfo.code, true);
+    rfb.sendKey(keyInfo.keysym, keyInfo.code, false);
+    rfb.sendKey(ctrlKeysym, "ControlLeft", false);
   }
 
   function handleBrowserClipboardShortcut(e) {
