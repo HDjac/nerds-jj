@@ -202,19 +202,24 @@ export default function BrowserView(props) {
 
       syncInternalClipboardToVnc();
 
+      /*
+      * If a paste is already pending, do not cancel or postpone it.
+      * Additional Cmd+V presses are ignored until the first paste finishes.
+      */
       if (macPasteTimer.current) {
-        clearTimeout(macPasteTimer.current);
+        console.log("Mac paste already pending; extra Cmd+V ignored");
+        return;
       }
 
+      syncInternalClipboardToVnc();
+
       macPasteTimer.current = setTimeout(() => {
-      /*
-       * The first synchronization has already had time to reach the
-       * remote system. Refresh it once, then paste using Shift+Insert.
-       */
         syncInternalClipboardToVnc();
         sendVncShiftInsert();
         macPasteTimer.current = null;
       }, 400);
+
+      console.log("First Mac Cmd+V scheduled remote paste");
 
       console.log("Mac Cmd+V queued as remote Shift+Insert");
       return;
