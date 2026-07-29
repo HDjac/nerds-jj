@@ -17,6 +17,8 @@ export default function BrowserView(props) {
   const [alerted, setAlerted] = useState(false);
   const audioPlugin = useRef(null);
   const macPasteTimer = useRef(null);
+  const pendingMacPaste = useRef(false);
+  const browserCopyPending = useRef(false);
 
   const SHOW_DEBUG = DEV_MODE;
 
@@ -64,16 +66,27 @@ export default function BrowserView(props) {
       return;
     }
 
+  /*
+   * Firefox has copied something, but noVNC has not returned the new
+   * clipboard value yet. Do not overwrite it with older editor text.
+   */
+    if (browserCopyPending.current) {
+      console.log(
+        "VNC clipboard sync skipped while browser copy is pending"
+      );
+      return;
+    }
+
     const text = getInternalClipboard();
 
-    // Send only the NERDS internal clipboard to remote Firefox.
-    // Sending an empty value also prevents stale remote text from being reused.
     rfbObj.current.clipboardPasteFrom(text || "");
 
     if (text) {
       console.log("NERDS internal clipboard sent to VNC");
     } else {
-      console.log("NERDS internal clipboard is empty; VNC clipboard cleared");
+      console.log(
+        "NERDS internal clipboard is empty; VNC clipboard cleared"
+      );
     }
   }
 
@@ -137,29 +150,61 @@ export default function BrowserView(props) {
     rfb.sendKey(ctrlKeysym, "ControlLeft", false);
   }
 
-  function sendVncShiftInsert() {
-    const rfb = rfbObj.current;
-
-    if (!rfb) {
+  function finishMacPaste(reason) {
+    if (!pendingMacPaste.current) {
       return;
     }
 
+    pendingMacPaste.current = false;
+
+    if (macPasteTimer.current) {
+      clearTimeout(macPasteTimer.current);
+      macPasteTimer.current = null;
+    }
+
   /*
-   * Linux Firefox supports Shift+Insert for paste. This avoids trying
-   * to generate Ctrl+V while the physical Mac Cmd key is still down.
+   * This sends editor text when it is current. If a browser copy is
+   * pending, the sync function deliberately does nothing so the new
+   * Firefox clipboard is not overwritten.
    */
-    releaseVncModifiers();
+    syncInternalClipboardToVnc();
 
-    const shiftKeysym = 0xffe1;
-    const insertKeysym = 0xff63;
+    macPasteTimer.current = setTimeout(() => {
+      syncInternalClipboardToVnc();
+      sendVncCtrlShortcut("v");
 
-    rfb.sendKey(shiftKeysym, "ShiftLeft", true);
-    rfb.sendKey(insertKeysym, "Insert", true);
-    rfb.sendKey(insertKeysym, "Insert", false);
-    rfb.sendKey(shiftKeysym, "ShiftLeft", false);
+      macPasteTimer.current = null;
 
-    console.log("Remote Shift+Insert sent for Mac Cmd+V");
+      console.log(`Remote Ctrl+V sent after ${reason}`);
+    }, 150);
   }
+
+  function handleBrowserKeyUp(e) {
+    if (
+      props.currentTab !== "browser" ||
+      rfbStatus !== "connected" ||
+      !pendingMacPaste.current
+    ) {
+      return;
+    }
+
+    const commandReleased =
+      e.key === "Meta" ||
+      e.code === "MetaLeft" ||
+      e.code === "MetaRight" ||
+      !e.metaKey;
+
+    if (commandReleased) {
+    /*
+     * Do not prevent this event. noVNC must receive the keyup so it
+     * can release the remote Mac/Alt modifier.
+     */
+      setTimeout(() => {
+        finishMacPaste("Mac Command key release");
+      }, 0);
+    }
+  }
+
 
   function handleBrowserClipboardShortcut(e) {
     if (
@@ -182,7 +227,7 @@ export default function BrowserView(props) {
 
   /*
    * Prevent the host browser and noVNC from independently processing
-   * the original shortcut.
+   * the original clipboard shortcut.
    */
     e.preventDefault();
     e.stopPropagation();
@@ -192,45 +237,48 @@ export default function BrowserView(props) {
     }
 
   /*
-   * Mac Cmd+V uses Shift+Insert remotely. Avoid scheduling additional
-   * pastes when the keys are held down and generate repeat events.
+   * Mac Cmd+V: record the paste request but do not send Ctrl+V until
+   * the physical Command key has been released.
    */
     if (key === "v" && e.metaKey && !e.ctrlKey) {
-      if (e.repeat) {
+      if (
+        e.repeat ||
+        pendingMacPaste.current ||
+        macPasteTimer.current
+      ) {
+        console.log(
+          "Mac paste already pending; extra Cmd+V ignored"
+        );
+
         return;
       }
 
       syncInternalClipboardToVnc();
+      pendingMacPaste.current = true;
 
-      /*
-      * If a paste is already pending, do not cancel or postpone it.
-      * Additional Cmd+V presses are ignored until the first paste finishes.
-      */
-      if (macPasteTimer.current) {
-        console.log("Mac paste already pending; extra Cmd+V ignored");
-        return;
-      }
-
-      syncInternalClipboardToVnc();
-
+    /*
+     * Normally handleBrowserKeyUp completes the paste. This fallback
+     * handles the unusual case where the browser loses the keyup event.
+     */
       macPasteTimer.current = setTimeout(() => {
-        syncInternalClipboardToVnc();
-        sendVncCtrlShortcut("v");
-        macPasteTimer.current = null;
-      }, 400);
+        finishMacPaste("keyup fallback");
+      }, 2000);
 
-      console.log("First Mac Cmd+V scheduled as remote Ctrl+V");
+      console.log(
+        "Mac Cmd+V detected; waiting for Command key release"
+      );
 
       return;
     }
 
   /*
-   * Keep the currently working Ctrl+V behavior.
+   * Preserve the working Ctrl+V behavior.
    */
     if (key === "v" && e.ctrlKey && !e.metaKey) {
       syncInternalClipboardToVnc();
 
       setTimeout(() => {
+        syncInternalClipboardToVnc();
         sendVncCtrlShortcut("v");
       }, 150);
 
@@ -239,23 +287,29 @@ export default function BrowserView(props) {
     }
 
   /*
-   * Preserve the working browser-to-editor copy and cut behavior.
+   * Mark browser copy as pending before sending remote Ctrl+C. This
+   * prevents mouse clicks or paste attempts from replacing the new
+   * Firefox clipboard with older editor text.
    */
     if (key === "c") {
+      browserCopyPending.current = true;
       sendVncCtrlShortcut("c");
 
       console.log(
-        `${e.metaKey ? "Cmd" : "Ctrl"}+C translated to remote Ctrl+C`
+        `${e.metaKey ? "Cmd" : "Ctrl"}+C sent; ` +
+        "waiting for browser clipboard"
       );
 
       return;
     }
 
     if (key === "x") {
+      browserCopyPending.current = true;
       sendVncCtrlShortcut("x");
 
       console.log(
-        `${e.metaKey ? "Cmd" : "Ctrl"}+X translated to remote Ctrl+X`
+        `${e.metaKey ? "Cmd" : "Ctrl"}+X sent; ` +
+        "waiting for browser clipboard"
       );
     }
   }
@@ -342,14 +396,20 @@ export default function BrowserView(props) {
     debug("Got clipboard event");
     debug(stat.detail);
 
-    /*
-     * Text copied or cut inside remote Firefox is stored only in the
-     * NERDS internal clipboard. It is not written to navigator.clipboard.
-     */
     if (stat.detail && stat.detail.text) {
+    /*
+     * Clear this before setInternalClipboard dispatches its event.
+     * The event listener may immediately send this new text to VNC.
+     */
+      browserCopyPending.current = false;
+
       setInternalClipboard(
         stat.detail.text,
         "internal_browser"
+      );
+
+      console.log(
+        "Newest browser clipboard received from VNC"
       );
     }
   }
@@ -429,7 +489,14 @@ export default function BrowserView(props) {
    * text reach the VNC clipboard before the user presses Cmd+V.
    */
   useEffect(() => {
-    function handleInternalClipboardEvent() {
+    function handleInternalClipboardEvent(event) {
+      /*
+      * A newer editor copy replaces any earlier pending browser copy.
+      */
+      if (event.detail?.source === "code_editor") {
+        browserCopyPending.current = false;
+      }
+
       if (rfbStatus === "connected") {
         syncInternalClipboardToVnc();
       }
@@ -473,6 +540,12 @@ export default function BrowserView(props) {
       true
     );
 
+    window.addEventListener(
+      "keyup",
+      handleBrowserKeyUp,
+      true
+    );
+
     return () => {
       window.removeEventListener(
         "keydown",
@@ -480,10 +553,18 @@ export default function BrowserView(props) {
         true
       );
 
+      window.removeEventListener(
+        "keyup",
+        handleBrowserKeyUp,
+        true
+      );
+
       if (macPasteTimer.current) {
         clearTimeout(macPasteTimer.current);
         macPasteTimer.current = null;
       }
+
+      pendingMacPaste.current = false;
     };
   }, [props.currentTab, rfbStatus]);
 
