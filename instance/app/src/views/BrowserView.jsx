@@ -19,6 +19,7 @@ export default function BrowserView(props) {
   const macPasteTimer = useRef(null);
   const pendingMacPaste = useRef(false);
   const browserCopyPending = useRef(false);
+  const browserCopyTimer = useRef(null);
 
   const SHOW_DEBUG = DEV_MODE;
 
@@ -205,6 +206,31 @@ export default function BrowserView(props) {
     }
   }
 
+  function clearBrowserCopyPending() {
+    browserCopyPending.current = false;
+
+    if (browserCopyTimer.current) {
+      clearTimeout(browserCopyTimer.current);
+      browserCopyTimer.current = null;
+    }
+  }
+
+  function beginBrowserCopy() {
+    clearBrowserCopyPending();
+
+    browserCopyPending.current = true;
+
+    /*
+    * Stop waiting if noVNC never returns a clipboard event.
+    * This prevents the pending flag from remaining active forever.
+    */
+    browserCopyTimer.current = setTimeout(() => {
+      browserCopyPending.current = false;
+      browserCopyTimer.current = null;
+
+      console.log("Browser copy timed out");
+    }, 3000);
+  }
 
   function handleBrowserClipboardShortcut(e) {
     if (
@@ -292,7 +318,7 @@ export default function BrowserView(props) {
    * Firefox clipboard with older editor text.
    */
     if (key === "c") {
-      browserCopyPending.current = true;
+      beginBrowserCopy();
       sendVncCtrlShortcut("c");
 
       console.log(
@@ -304,7 +330,7 @@ export default function BrowserView(props) {
     }
 
     if (key === "x") {
-      browserCopyPending.current = true;
+      beginBrowserCopy();
       sendVncCtrlShortcut("x");
 
       console.log(
@@ -396,22 +422,32 @@ export default function BrowserView(props) {
     debug("Got clipboard event");
     debug(stat.detail);
 
-    if (stat.detail && stat.detail.text) {
-    /*
-     * Clear this before setInternalClipboard dispatches its event.
-     * The event listener may immediately send this new text to VNC.
-     */
-      browserCopyPending.current = false;
-
-      setInternalClipboard(
-        stat.detail.text,
-        "internal_browser"
-      );
-
-      console.log(
-        "Newest browser clipboard received from VNC"
-      );
+    if (!stat.detail || !stat.detail.text) {
+      return;
     }
+
+    /*
+    * Linux can produce clipboard events merely from selecting text.
+    * Accept an event only after an explicit Ctrl/Cmd+C or Ctrl/Cmd+X.
+    */
+    if (!browserCopyPending.current) {
+      console.log(
+        "Unsolicited browser selection clipboard ignored"
+      );
+
+      return;
+    }
+
+    clearBrowserCopyPending();
+
+    setInternalClipboard(
+      stat.detail.text,
+      "internal_browser"
+    );
+
+    console.log(
+      "Explicit browser copy saved to NERDS clipboard"
+    );
   }
 
   // Create the initial VNC connection.
@@ -494,7 +530,7 @@ export default function BrowserView(props) {
       * A newer editor copy replaces any earlier pending browser copy.
       */
       if (event.detail?.source === "code_editor") {
-        browserCopyPending.current = false;
+        clearBrowserCopyPending();
       }
 
       if (rfbStatus === "connected") {
@@ -564,7 +600,13 @@ export default function BrowserView(props) {
         macPasteTimer.current = null;
       }
 
+      if (browserCopyTimer.current) {
+        clearTimeout(browserCopyTimer.current);
+        browserCopyTimer.current = null;
+      }
+
       pendingMacPaste.current = false;
+      browserCopyPending.current = false;
     };
   }, [props.currentTab, rfbStatus]);
 
