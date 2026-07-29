@@ -215,13 +215,12 @@ export default function BrowserView(props) {
 
       macPasteTimer.current = setTimeout(() => {
         syncInternalClipboardToVnc();
-        sendVncShiftInsert();
+        sendVncCtrlShortcut("v");
         macPasteTimer.current = null;
       }, 400);
 
-      console.log("First Mac Cmd+V scheduled remote paste");
+      console.log("First Mac Cmd+V scheduled as remote Ctrl+V");
 
-      console.log("Mac Cmd+V queued as remote Shift+Insert");
       return;
     }
 
