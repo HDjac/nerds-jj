@@ -16,6 +16,7 @@ export default function BrowserView(props) {
   const [rfbStatus, setRfbStatus] = useState(null);
   const [alerted, setAlerted] = useState(false);
   const audioPlugin = useRef(null);
+  const macPasteTimer = useRef(null);
 
   const SHOW_DEBUG = DEV_MODE;
 
@@ -76,6 +77,39 @@ export default function BrowserView(props) {
     }
   }
 
+  function releaseVncModifiers() {
+    const rfb = rfbObj.current;
+
+    if (!rfb) {
+      return;
+    }
+
+  /*
+   * Release all possible remote modifiers. noVNC can translate the
+   * macOS Cmd/Super key into Alt, so Alt must also be released.
+   */
+    const modifiers = [
+      0xffe1, // Shift_L
+      0xffe2, // Shift_R
+      0xffe3, // Control_L
+      0xffe4, // Control_R
+      0xffe7, // Meta_L
+      0xffe8, // Meta_R
+      0xffe9, // Alt_L
+      0xffea, // Alt_R
+      0xffeb, // Super_L
+      0xffec  // Super_R
+    ];
+
+    rfb.blur();
+
+    modifiers.forEach((keysym) => {
+      rfb.sendKey(keysym, null, false);
+    });
+
+    rfb.focus();
+  }
+
   function sendVncCtrlShortcut(key) {
     const rfb = rfbObj.current;
 
@@ -93,31 +127,7 @@ export default function BrowserView(props) {
       return;
     }
 
-  /*
-   * Reset noVNC keyboard tracking. On macOS, noVNC can translate
-   * the Cmd/Super key into remote Alt, so Meta/Super releases alone
-   * are insufficient.
-   */
-    rfb.blur();
-
-    const modifiers = [
-      0xffe1, // Shift_L
-      0xffe2, // Shift_R
-      0xffe3, // Control_L
-      0xffe4, // Control_R
-      0xffe7, // Meta_L
-      0xffe8, // Meta_R
-      0xffe9, // Alt_L
-      0xffea, // Alt_R
-      0xffeb, // Super_L
-      0xffec  // Super_R
-    ];
-
-    modifiers.forEach((keysym) => {
-      rfb.sendKey(keysym, null, false);
-    });
-
-    rfb.focus();
+    releaseVncModifiers();
 
     const ctrlKeysym = 0xffe3;
 
@@ -125,6 +135,30 @@ export default function BrowserView(props) {
     rfb.sendKey(keyInfo.keysym, keyInfo.code, true);
     rfb.sendKey(keyInfo.keysym, keyInfo.code, false);
     rfb.sendKey(ctrlKeysym, "ControlLeft", false);
+  }
+
+  function sendVncShiftInsert() {
+    const rfb = rfbObj.current;
+
+    if (!rfb) {
+      return;
+    }
+
+  /*
+   * Linux Firefox supports Shift+Insert for paste. This avoids trying
+   * to generate Ctrl+V while the physical Mac Cmd key is still down.
+   */
+    releaseVncModifiers();
+
+    const shiftKeysym = 0xffe1;
+    const insertKeysym = 0xff63;
+
+    rfb.sendKey(shiftKeysym, "ShiftLeft", true);
+    rfb.sendKey(insertKeysym, "Insert", true);
+    rfb.sendKey(insertKeysym, "Insert", false);
+    rfb.sendKey(shiftKeysym, "ShiftLeft", false);
+
+    console.log("Remote Shift+Insert sent for Mac Cmd+V");
   }
 
   function handleBrowserClipboardShortcut(e) {
@@ -146,10 +180,10 @@ export default function BrowserView(props) {
       return;
     }
 
-    /*
-     * Prevent the host browser and noVNC from processing the original
-     * clipboard shortcut. We will send a controlled shortcut instead.
-     */
+  /*
+   * Prevent the host browser and noVNC from independently processing
+   * the original shortcut.
+   */
     e.preventDefault();
     e.stopPropagation();
 
@@ -157,33 +191,52 @@ export default function BrowserView(props) {
       e.stopImmediatePropagation();
     }
 
-    if (key === "v") {
-      /*
-       * Update the remote Linux clipboard twice. The second update
-       * handles cases where focus is changing between the React page,
-       * the noVNC canvas, and remote Firefox.
-       */
+  /*
+   * Mac Cmd+V uses Shift+Insert remotely. Avoid scheduling additional
+   * pastes when the keys are held down and generate repeat events.
+   */
+    if (key === "v" && e.metaKey && !e.ctrlKey) {
+      if (e.repeat) {
+        return;
+      }
+
       syncInternalClipboardToVnc();
 
-      setTimeout(() => {
-        syncInternalClipboardToVnc();
-      }, 150);
+      if (macPasteTimer.current) {
+        clearTimeout(macPasteTimer.current);
+      }
 
+      macPasteTimer.current = setTimeout(() => {
       /*
-       * Give remote Firefox time to receive the clipboard value before
-       * sending one Ctrl+V. This should make one Cmd+V produce one paste.
+       * The first synchronization has already had time to reach the
+       * remote system. Refresh it once, then paste using Shift+Insert.
        */
-      setTimeout(() => {
-        sendVncCtrlShortcut("v");
+        syncInternalClipboardToVnc();
+        sendVncShiftInsert();
+        macPasteTimer.current = null;
       }, 400);
 
-      console.log(
-        `${e.metaKey ? "Cmd" : "Ctrl"}+V queued for the remote browser`
-      );
-
+      console.log("Mac Cmd+V queued as remote Shift+Insert");
       return;
     }
 
+  /*
+   * Keep the currently working Ctrl+V behavior.
+   */
+    if (key === "v" && e.ctrlKey && !e.metaKey) {
+      syncInternalClipboardToVnc();
+
+      setTimeout(() => {
+        sendVncCtrlShortcut("v");
+      }, 150);
+
+      console.log("Ctrl+V queued as remote Ctrl+V");
+      return;
+    }
+
+  /*
+   * Preserve the working browser-to-editor copy and cut behavior.
+   */
     if (key === "c") {
       sendVncCtrlShortcut("c");
 
@@ -422,6 +475,11 @@ export default function BrowserView(props) {
         handleBrowserClipboardShortcut,
         true
       );
+
+      if (macPasteTimer.current) {
+        clearTimeout(macPasteTimer.current);
+        macPasteTimer.current = null;
+      }
     };
   }, [props.currentTab, rfbStatus]);
 
