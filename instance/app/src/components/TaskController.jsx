@@ -137,10 +137,25 @@ export default function TaskController(props) {
     <div id="taskWindow">
       <div id="task">
         <h3>Task {taskno + 1}</h3>
-        <div dangerouslySetInnerHTML={{"__html":task_desc}}></div>
+
+        <div
+          dangerouslySetInnerHTML={{ "__html": task_desc }}
+        ></div>
+
+        {taskno !== max_taskno - 1 && (
+          <div
+            className="macClipboardNotice"
+            role="note"
+            aria-label="Mac browser shortcut instructions"
+          >
+            <strong>Mac users:</strong> In the Browser tab, use
+            Control+C and Control+V—not Command+C and Command+V.
+          </div>
+        )}
       </div>
+
       <div id="taskButtons">
-        { taskButtons }
+        {taskButtons}
       </div>
     </div>
   );

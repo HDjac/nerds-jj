@@ -42,3 +42,14 @@
   overflow-y: auto;
   padding-right: 5px;
 }
+
+.macClipboardNotice {
+  box-sizing: border-box;
+  margin-top: 1rem;
+  padding: 0.5rem 0.65rem;
+  border-left: 4px solid #d89b00;
+  background-color: #fff4cc;
+  color: #2b2b2b;
+  font-size: 0.95rem;
+  line-height: 1.3;
+}

@@ -79,6 +79,37 @@ If you are unable to complete a task, click <b>Skip Task</b>. We still appreciat
     </p>
 <?php endif; ?>
 
+<h3>Copy and Paste</h3>
+
+<p>
+  Copying and pasting is limited to content from inside the study
+  environment. Text copied from outside the study cannot be pasted
+  into the Code tab.
+</p>
+
+<ul>
+  <li>
+    <strong>Code tab:</strong>
+    Use Ctrl+C/Ctrl+V on Windows or Command+C/Command+V on Mac.
+  </li>
+
+  <li>
+    <strong>Browser tab:</strong>
+    Use Ctrl+C and Ctrl+V on both Windows and Mac.
+  </li>
+
+  <li>
+    <strong>Mac users:</strong>
+    The Browser tab runs on a remote Linux system. Use the
+    <strong>Control</strong> key instead of the Command key.
+  </li>
+
+  <li>
+    You may also right-click inside the Browser tab and select
+    <strong>Copy</strong> or <strong>Paste</strong>.
+  </li>
+</ul>
+
 <p>Please wait while we start your editor, this will only take a couple of seconds. You can start as soon as the button shows <b>Start Study</b>.</p>
         </div>
         <div class="col-lg-6">
