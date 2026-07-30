@@ -20,6 +20,7 @@ export default function BrowserView(props) {
   const pendingMacPaste = useRef(false);
   const browserCopyPending = useRef(false);
   const browserCopyTimer = useRef(null);
+  const browserSelectionCandidate = useRef("");
 
   const SHOW_DEBUG = DEV_MODE;
 
@@ -132,9 +133,9 @@ export default function BrowserView(props) {
     }
 
     const keyInfo = {
-      c: { keysym: 0x0063, code: "KeyC" },
-      v: { keysym: 0x0076, code: "KeyV" },
-      x: { keysym: 0x0078, code: "KeyX" }
+      c: { keysym: 0x0063 },
+      v: { keysym: 0x0076 },
+      x: { keysym: 0x0078 }
     }[key.toLowerCase()];
 
     if (!keyInfo) {
@@ -145,10 +146,23 @@ export default function BrowserView(props) {
 
     const ctrlKeysym = 0xffe3;
 
-    rfb.sendKey(ctrlKeysym, "ControlLeft", true);
-    rfb.sendKey(keyInfo.keysym, keyInfo.code, true);
-    rfb.sendKey(keyInfo.keysym, keyInfo.code, false);
-    rfb.sendKey(ctrlKeysym, "ControlLeft", false);
+    // Use null codes to send standard VNC keysym events.
+    rfb.sendKey(ctrlKeysym, null, true);
+
+    setTimeout(() => {
+      rfb.sendKey(keyInfo.keysym, null, true);
+
+      setTimeout(() => {
+        rfb.sendKey(keyInfo.keysym, null, false);
+
+        setTimeout(() => {
+          rfb.sendKey(ctrlKeysym, null, false);
+
+          // Ensure nothing remains held before the next shortcut.
+          releaseVncModifiers();
+        }, 20);
+      }, 20);
+    }, 20);
   }
 
   function finishMacPaste(reason) {
@@ -217,19 +231,37 @@ export default function BrowserView(props) {
 
   function beginBrowserCopy() {
     clearBrowserCopyPending();
-
     browserCopyPending.current = true;
 
     /*
-    * Stop waiting if noVNC never returns a clipboard event.
-    * This prevents the pending flag from remaining active forever.
+    * noVNC/Linux may have already sent the selected text before the
+    * explicit copy shortcut. Give it a short chance to send another
+    * event, then promote the cached selection if it does not.
     */
     browserCopyTimer.current = setTimeout(() => {
-      browserCopyPending.current = false;
-      browserCopyTimer.current = null;
+      if (!browserCopyPending.current) {
+        return;
+      }
 
-      console.log("Browser copy timed out");
-    }, 3000);
+      const cachedText = browserSelectionCandidate.current;
+
+      clearBrowserCopyPending();
+
+      if (cachedText) {
+        setInternalClipboard(
+          cachedText,
+          "internal_browser"
+        );
+
+        console.log(
+          "Explicit browser copy used cached selection"
+        );
+      } else {
+        console.log(
+          "Browser copy completed without any selected text"
+        );
+      }
+    }, 250);
   }
 
   function handleBrowserClipboardShortcut(e) {
@@ -426,13 +458,17 @@ export default function BrowserView(props) {
       return;
     }
 
+    const text = stat.detail.text;
+
     /*
-    * Linux can produce clipboard events merely from selecting text.
-    * Accept an event only after an explicit Ctrl/Cmd+C or Ctrl/Cmd+X.
+    * Always remember the latest Linux selection, but do not immediately
+    * make it the NERDS clipboard unless Copy/Cut was explicitly used.
     */
+    browserSelectionCandidate.current = text;
+
     if (!browserCopyPending.current) {
       console.log(
-        "Unsolicited browser selection clipboard ignored"
+        "Browser selection cached but not copied"
       );
 
       return;
@@ -441,7 +477,7 @@ export default function BrowserView(props) {
     clearBrowserCopyPending();
 
     setInternalClipboard(
-      stat.detail.text,
+      text,
       "internal_browser"
     );
 
@@ -531,6 +567,7 @@ export default function BrowserView(props) {
       */
       if (event.detail?.source === "code_editor") {
         clearBrowserCopyPending();
+        browserSelectionCandidate.current = "";
       }
 
       if (rfbStatus === "connected") {
