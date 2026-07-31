@@ -139,7 +139,7 @@ try{
             $ec2instance = $serverData[0];
             $instanceId = $serverData[1];
             //$sth = $connect->prepare('UPDATE "createdInstances" SET ec2instance = :ec2instance, instanceid = :instanceid, time=NOW(), heartbeat=NOW(), condition = :condition, category = :category, finished = False, "instanceTerminated" = False WHERE userid = :userid;');
-            $sth = $connect->prepare('UPDATE "createdInstances" SET ec2instance = :ec2instance, instanceid = :instanceid, time=NOW(), heartbeat=NOW(), finished = False, "instanceTerminated" = False WHERE userid = :userid;');
+            $sth = $connect->prepare('UPDATE "createdInstances" SET ec2instance = :ec2instance, instanceid = :instanceid, time=NOW(), heartbeat=NOW(), session_start = NULL, finished = False, "instanceTerminated" = False WHERE userid = :userid;');
             $sth->bindParam(':ec2instance', $ec2instance);
             $sth->bindParam(':userid', $token);
             $sth->bindParam(':instanceid', $instanceId);

@@ -259,6 +259,10 @@ export default function CodeEditor(props) {
   }
 
   function handleBeforeUnload(e) {
+    if (window.__NERDS_ALLOW_UNLOAD__) {
+      return;
+    }
+
     e.preventDefault();
   }
 

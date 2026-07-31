@@ -15,6 +15,7 @@ import {submit, compile} from "./services";
 function App() {
   const [tab, setTab] = useSavedState("tab", "code");
   const [connStatus, setConnStatus] = useState(false);
+  const [timingOut, setTimingOut] = useState(false);
   const [taskno, set_taskno] = useSavedState("taskno", 0);
   const [task_list, set_task_list] = useSavedState("task_list", [
     {
@@ -48,13 +49,21 @@ function App() {
 
   //pseudo state for value in state array
   const editor_value = editorValues[taskno] || "";
-
-
+  const latestEditorValueRef = useRef(editor_value);
 
   const set_editor_value = new_value => {
-    setEditorValues(
-      editorValues.map((item, i) => (i===taskno) ? new_value: item)
-    )
+    const resolvedValue =
+      typeof new_value === "function"
+        ? new_value(latestEditorValueRef.current)
+        : new_value;
+
+    latestEditorValueRef.current = resolvedValue ?? "";
+
+    setEditorValues(currentValues =>
+      currentValues.map(
+        (item, i) => (i === taskno ? latestEditorValueRef.current : item)
+      )
+    );
   }
 
 
@@ -97,6 +106,8 @@ function App() {
   
 
   const editorRef = useRef(null);
+  const timeoutStartedRef = useRef(false);
+  const timeoutSubmitRef = useRef(null);
   const focus_time = useFocusTime();
 
   // Cheat to hide noVNC cursor on tab switch since it exists outside of the react DOM
@@ -119,7 +130,7 @@ function App() {
     }
   }, [tab]);
 
-  function submit_code(statusCode, extraData) {
+  function submit_code(statusCode, extraData, editorOverride) {
     // Do some submitting
     /* Submit format
      * {
@@ -156,7 +167,9 @@ function App() {
     }
 
     console.debug(`submit ${statusCode}`);
-    if (editorRef.current) {
+    if (editorOverride !== undefined) {
+      data.code.editor = editorOverride;
+    } else if (editorRef.current) {
       data.code.editor = editorRef.current.getValue();
     }
     if (output) {
@@ -165,8 +178,19 @@ function App() {
     if (extraData) {
       data.code.extra_data = extraData;
     }
-    submit(data);
+    return submit(data);
   }
+
+  timeoutSubmitRef.current = editorSnapshot => {
+    return submit_code(
+      "x",
+      {
+        timed_out: true,
+        timeout_minutes: 60
+      },
+      editorSnapshot
+    );
+  };
 
   function compile_code(code) {
     submit_code("r");
@@ -203,8 +227,117 @@ function App() {
     };
   });
 
+  useEffect(() => {
+    const instanceMatch = window.location.pathname.match(
+      /^\/proxy\/([a-f0-9]{12})\//
+    );
+    const instanceId = instanceMatch ? instanceMatch[1] : null;
+
+    if (!instanceId) {
+      console.debug("Session timer disabled: missing instance identifier.");
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function checkSessionStatus() {
+      if (cancelled || timeoutStartedRef.current) {
+        return;
+      }
+
+      try {
+        const query = new URLSearchParams({
+          instanceId
+        });
+
+        const response = await fetch(
+          `/sessionStatus.php?${query.toString()}`,
+          {
+            cache: "no-store",
+            credentials: "same-origin"
+          }
+        );
+
+        if (!response.ok) {
+          console.debug(
+            `Session status request failed with ${response.status}`
+          );
+          return;
+        }
+
+        const status = await response.json();
+
+        if (!status.expired || timeoutStartedRef.current) {
+          return;
+        }
+
+        const editorSnapshot = latestEditorValueRef.current;
+
+        timeoutStartedRef.current = true;
+        setTimingOut(true);
+
+        try {
+          /*
+           * Save the current task and editor contents while the
+           * participant container is still available.
+           */
+          await timeoutSubmitRef.current(editorSnapshot);
+        } catch (error) {
+          /*
+           * The survey redirect still occurs if the final save fails.
+           * The five-minute server grace period makes failure unlikely.
+           */
+          console.error("Timeout submission failed:", error);
+        }
+
+        window.__NERDS_ALLOW_UNLOAD__ = true;
+        window.location.href = "../survey";
+      } catch (error) {
+        console.debug("Unable to check session status:", error);
+      }
+    }
+
+    checkSessionStatus();
+
+    const interval = window.setInterval(
+      checkSessionStatus,
+      5000
+    );
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
   return (
     <>
+      {timingOut && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 10000,
+            background: "rgba(255, 255, 255, 0.96)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            textAlign: "center",
+            padding: "2rem",
+            fontSize: "1.25rem"
+          }}
+        >
+          <div>
+            <strong>Your study time is complete.</strong>
+            <p>
+              Saving your current work and opening the final survey...
+            </p>
+          </div>
+        </div>
+      )}
+
       <Header />
       <div className="container-fluid main">
         <TaskController

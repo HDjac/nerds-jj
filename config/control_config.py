@@ -3,3 +3,4 @@ CHECK_INTERVAL = 30
 REDIS_OLD_LIST = "oldInstances"
 LOG_LEVEL = "%logLevel%"
 INSTANCE_IDLE_TIME = "%instanceIdleTime%"
+INSTANCE_MAX_TIME = "65 minutes"

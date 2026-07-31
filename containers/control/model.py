@@ -11,6 +11,7 @@ class CreatedInstances(Base):
     ip = Column(String)
     origin = Column(Integer)
     time = Column(DateTime, default=func.current_timestamp())
+    session_start = Column(DateTime(timezone=True))
     ec2instance = Column(String)
     category = Column(Integer)
     condition = Column(Integer)

@@ -132,11 +132,53 @@ If you are unable to complete a task, click <b>Skip Task</b>. We still appreciat
         function(data, status){
             if(data != 'error'){
                 if(data.length > 5){
+                    const assignedUrl = $.trim(data);
+                    const instanceMatch = assignedUrl.match(
+                        /^\/proxy\/([a-f0-9]{12})\//
+                    );
+
+                    if (!instanceMatch) {
+                        $('#loadingButton').html(
+                            "Unable to start study. Please try again."
+                        );
+                        $('#loadingButton').removeClass("btn-warning");
+                        $('#loadingButton').addClass("btn-danger");
+                        return;
+                    }
+
+                    const instanceId = instanceMatch[1];
+
                     $('#loadingButton').html("Start study");
                     $('#loadingButton').removeClass("btn-warning");
                     $('#loadingButton').addClass("btn-success");
-                    $('#loadingButton').click(function() {
-                       window.location = data;
+                    $('#loadingButton').off('click').on('click', function() {
+                        const button = $(this);
+
+                        button.prop('disabled', true);
+                        button.html('Starting study...');
+
+                        $.post(
+                            'startStudy.php',
+                            {
+                                userid: "<?php echo $uniqid; ?>",
+                                instanceid: instanceId
+                            },
+                            function(startResult) {
+                                if ($.trim(startResult) === 'ok') {
+                                    window.location = assignedUrl;
+                                } else {
+                                    button.prop('disabled', false);
+                                    button.html('Unable to start study. Please try again.');
+                                    button.removeClass('btn-success');
+                                    button.addClass('btn-danger');
+                                }
+                            }
+                        ).fail(function() {
+                            button.prop('disabled', false);
+                            button.html('Unable to start study. Please try again.');
+                            button.removeClass('btn-success');
+                            button.addClass('btn-danger');
+                        });
                     });
                     //window.location = data;
                 } else {

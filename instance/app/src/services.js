@@ -32,18 +32,26 @@ function compile(data) {
 function submit(nb_data) {
   // Submit the JSON object given by nb_data to the server
   if (BACKEND_PRESENT) {
-    fetch(`${API_BASE_PATH}/submit`, {
+    return fetch(`${API_BASE_PATH}/submit`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
       body: JSON.stringify(nb_data)
+    }).then((response) => {
+      if (!response.ok) {
+        throw new Error(`Submit failed with status ${response.status}`);
+      }
+
+      return response.text();
     }).catch(reason => {
       console.debug(`Submit error: ${reason}`);
+      throw reason;
     });
   } else {
     console.debug("Submitting data:");
     console.debug(nb_data);
+    return Promise.resolve("Development submission");
   }
 }
 
