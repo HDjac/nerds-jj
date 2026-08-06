@@ -299,10 +299,11 @@ export default function CodeEditor(props) {
         />
       </div>
       <Editor
+          key={props.task ? `task-${props.task.task_no}` : `task-${props.taskno}`}
         language={"c"}
         options={{ domReadOnly: false, readOnly: false }}
-        path={`task${props.taskno}`}
-        defaultValue={editorValue}
+          path={props.task ? `task-${props.task.task_no}.c` : `task-${props.taskno}.c`}
+          value={editorValue || ""}
         theme="vs-dark"
         onMount={handleEditorDidMount}
         onChange={handleEditorDidChange}
