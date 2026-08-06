@@ -161,52 +161,92 @@ if __name__ == "__main__":
     statsd.gauge(f"{STAT_PREFIX}.died_early_cumulative", 0)
 
     log.info("Monitoring redis for events, press Ctrl-C to stop...")
-    while(True):
-        # -- Add new containers if needed --
-        # Ensure booting counter is not negative
+    while True:
         try:
+            # -- Add new containers if needed --
+            # Ensure booting counter is not negative
             booting = r.get(config.REDIS_BOOTING_COUNTER)
-        except redis.exceptions.ConnectionError:
-            log.error("Lost connection to redis, stopping script...")
-            sigint_handler(None,None)
 
-        # Check booting counter
-        if booting == None or dint(booting) < 0:
-            r.set(config.REDIS_BOOTING_COUNTER, 0)
+            if booting is None or dint(booting) < 0:
+                r.set(config.REDIS_BOOTING_COUNTER, 0)
 
-        # Log number of containers to statsd
-        queue_len = dint(r.llen(config.REDIS_QUEUE))
-        booting = dint(r.get(config.REDIS_BOOTING_COUNTER))
-        statsd.gauge(f"{STAT_PREFIX}.running_containers", len(RUNNING_CONTAINERS))
-        statsd.gauge(f"{STAT_PREFIX}.container_queue", queue_len)
-        statsd.gauge(f"{STAT_PREFIX}.booting", booting)
+            # Log number of containers to statsd
+            queue_len = dint(r.llen(config.REDIS_QUEUE))
+            booting = dint(r.get(config.REDIS_BOOTING_COUNTER))
 
-        # -- Add new containers --
-        if queue_len + booting < config.POOL_SIZE:
-            r.incr(config.REDIS_BOOTING_COUNTER)
-            statsd.gauge(f"{STAT_PREFIX}.started_containers", 1, delta=True)
-            with statsd.timer(f"{STAT_PREFIX}.create_container"):
-                # Create docker container
-                c = create_container(client, config.INSTANCE_TAG)
-                r.rpush(config.REDIS_QUEUE, f"{c.name}|||{c.id[:12]}")
-            log.info(f"Started new container: {c.name}")
-            r.decr(config.REDIS_BOOTING_COUNTER)
+            statsd.gauge(
+                f"{STAT_PREFIX}.running_containers",
+                len(RUNNING_CONTAINERS)
+            )
+            statsd.gauge(
+                f"{STAT_PREFIX}.container_queue",
+                queue_len
+            )
+            statsd.gauge(
+                f"{STAT_PREFIX}.booting",
+                booting
+            )
 
-        # -- Remove old containers --
-        old_cont = r.lrange(config.REDIS_OLD_LIST, 0, -1)
-        if len(old_cont) > 0:
-            for cont in old_cont:
-                if stop_container(client, cont.decode()):
-                    r.lpop(config.REDIS_OLD_LIST)
-                    log.info("Stopped old container %s", cont.decode())
+            # -- Add new containers --
+            if queue_len + booting < config.POOL_SIZE:
+                r.incr(config.REDIS_BOOTING_COUNTER)
+                statsd.gauge(
+                    f"{STAT_PREFIX}.started_containers",
+                    1,
+                    delta=True
+                )
 
-        # -- Check for any early exited containers ---
-        stopped_conts = get_stopped_containers(client, config.INSTANCE_TAG)
-        statsd.gauge(f"{STAT_PREFIX}.died_early_cumulative", len(stopped_conts), delta=True)
-        if len(stopped_conts) > 0:
-            log.warning("There are some containers that stopped early")
-            for cont in stopped_conts:
-                stop_container(client, cont.id)
+                with statsd.timer(f"{STAT_PREFIX}.create_container"):
+                    c = create_container(client, config.INSTANCE_TAG)
+                    r.rpush(
+                        config.REDIS_QUEUE,
+                        f"{c.name}|||{c.id[:12]}"
+                    )
+
+                log.info("Started new container: %s", c.name)
+                r.decr(config.REDIS_BOOTING_COUNTER)
+
+            # -- Remove old containers --
+            old_cont = r.lrange(config.REDIS_OLD_LIST, 0, -1)
+
+            if len(old_cont) > 0:
+                for cont in old_cont:
+                    if stop_container(client, cont.decode()):
+                        r.lpop(config.REDIS_OLD_LIST)
+                        log.info(
+                            "Stopped old container %s",
+                            cont.decode()
+                        )
+
+            # -- Check for any early exited containers --
+            stopped_conts = get_stopped_containers(
+                client,
+                config.INSTANCE_TAG
+            )
+
+            statsd.gauge(
+                f"{STAT_PREFIX}.died_early_cumulative",
+                len(stopped_conts),
+                delta=True
+            )
+
+            if len(stopped_conts) > 0:
+                log.warning(
+                    "There are some containers that stopped early"
+                )
+
+                for cont in stopped_conts:
+                    stop_container(client, cont.id)
+
+        except (
+            redis.exceptions.ConnectionError,
+            redis.exceptions.TimeoutError
+        ) as error:
+            log.warning(
+                "Redis connection unavailable; retrying in 5 seconds: %s",
+                error
+            )
+            sleep(5)
+            continue
 
         sleep(config.CHECK_INTERVAL)
-
