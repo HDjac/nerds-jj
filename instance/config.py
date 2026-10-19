@@ -1,4 +1,4 @@
-LANDING_URL = ""
+LANDING_URL = "https://study.codedevstudy.com"
 APP_MODE = "DEBUG"
 SUBMIT_SECRET = "8y3gCusDsgzYQhKUznLxRDNzNZ1LMZmI"
 USER_DATA_FILE = "/home/user/.instanceinfo"
