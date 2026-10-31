@@ -1,19 +1,19 @@
 import './App.css';
 import {useState, useEffect, useRef} from 'react';
-import CodingView from "./views/CodingView";
+
 import BrowserView from "./views/BrowserView";
 import StatusDot from "./components/StatusDot";
-import TaskController from "./components/TaskController";
+import TaskController from "./components/PilotTaskController";
 import TabNav from "./components/TabNav";
-import TabView from "./components/TabView";
+
 import Header from "./components/Header";
 import useFocusTime from "./hooks/useFocusTime";
 import useSavedState from "./hooks/useSavedState";
 import useTaskState from "./hooks/useTaskState";
-import {submit, compile} from "./services";
+import {submit, compile, activateWorkspace} from "./services";
 
 function App() {
-  const [tab, setTab] = useSavedState("tab", "code");
+  const [tab, setTab] = useSavedState("tab", "cli");
   const [connStatus, setConnStatus] = useState(false);
   const [taskno, set_taskno] = useSavedState("taskno", 0);
   const [task_list, set_task_list] = useSavedState("task_list", [
@@ -99,25 +99,41 @@ function App() {
   const editorRef = useRef(null);
   const focus_time = useFocusTime();
 
-  // Cheat to hide noVNC cursor on tab switch since it exists outside of the react DOM
+  // Migrate previously saved CODE tabs to CLI.
   useEffect(() => {
-    if (tab !== "browser") {
-      document.body.querySelectorAll("canvas").forEach((canvas) => {
-        if (canvas.style.position == "fixed") {
-          console.debug("Hiding fixed canvas");
-          canvas.style.display = "none";
-        }
+    if (tab !== "cli" && tab !== "browser") {
+      setTab("cli");
+    }
+  }, [tab, setTab]);
+
+  // The trusted host archives and replaces the workspace between tasks.
+  // After /api/tasks reports the newly released task, show its *new* CLI
+  // window, even when BROWSER was previously selected.
+  useEffect(() => {
+    const onReleasedTask = () => {
+      setTab("cli");
+      activateWorkspace("cli").catch((err) => {
+        console.warn("New CLI window is starting:", err);
+        window.setTimeout(() => {
+          activateWorkspace("cli").catch(() => {});
+        }, 1500);
       });
-    } else {
-      document.body.querySelectorAll("canvas").forEach((canvas) => {
-        if (canvas.style.position == "fixed") {
-          console.debug("Showing fixed canvas");
-          //canvas.hidden = false;
-          canvas.style.display = null;
-        }
+    };
+    window.addEventListener("nerds:pilot-task-released", onReleasedTask);
+    return () => window.removeEventListener("nerds:pilot-task-released", onReleasedTask);
+  }, [setTab]);
+
+  // Switch the active Linux window when the participant
+  // selects CLI or BROWSER.
+  useEffect(() => {
+    if (!connStatus) return;
+
+    if (tab === "cli" || tab === "browser") {
+      activateWorkspace(tab).catch((error) => {
+        console.error("Workspace switching failed:", error);
       });
     }
-  }, [tab]);
+  }, [tab, connStatus]);
 
   function submit_code(statusCode, extraData) {
     // Do some submitting
@@ -220,27 +236,13 @@ function App() {
             </div>
           </div>
           <div className="tab-views">
-            <TabView tabName="code" currentTab={tab}>
-              <CodingView
-                taskno={taskno}
-                task={task_list[taskno]}
-                editor_value={editor_value}
-                set_editor_value={set_editor_value}
-                submit={submit_code}
-                editorRef={editorRef}
-                output={[output, set_output]}
-                compile_code={compile_code}
+            <div className="tabView">
+              <BrowserView
+                setConnStatus={setConnStatus}
+                currentTab={tab}
               />
-            </TabView>
-
-            <TabView tabName="browser" currentTab={tab}>
-              {/*We pass current tab so BrowserView can see when the user
-              switches tabs and when it needs to compute a resize for the
-              window*/}
-              <BrowserView setConnStatus={setConnStatus} currentTab={tab}/>
-            </TabView>
+            </div>
           </div>
-
         </div>
       </div>
 

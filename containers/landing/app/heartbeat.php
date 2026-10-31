@@ -4,7 +4,7 @@
 //! This software may be modified and distributed under the terms
 //! of the MIT license.  See the LICENSE file for details.
 
-define('__DIR__', dirname(__FILE__)); 
+
 require_once(__DIR__."/../webpageConf/config.php");
 $connect = new PDO("pgsql:host=$dbhost;dbname=$dbname", $dbuser, $dbpass);
 

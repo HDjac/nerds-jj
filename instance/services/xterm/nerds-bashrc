@@ -1,0 +1,53 @@
+# NERDs interactive CLI startup, sourced only by this xterm's Bash process.
+# Best-effort, user-accessible records, not a secure audit boundary.
+
+[[ $- == *i* ]] || return 0
+
+# Keep the participant's familiar aliases/prompt if present.
+if [[ -r "$HOME/.bashrc" ]]; then
+    source "$HOME/.bashrc"
+fi
+
+# Ensure interactive entries, including repeats and leading-space commands,
+# reach Bash's in-memory history. No plaintext disk history is requested.
+HISTCONTROL=
+HISTIGNORE=
+HISTSIZE=100000
+HISTFILE=/dev/null
+set -o history
+
+__nerds_last_history_num=-1
+__nerds_record_sequence=0
+
+__nerds_after_command() {
+    local exit_code=$?
+    local recent history_num command
+
+    recent="$(HISTTIMEFORMAT= builtin history 1)" || return 0
+    if [[ "$recent" =~ ^[[:space:]]*([0-9]+)[[:space:]]+(.*)$ ]]; then
+        history_num="${BASH_REMATCH[1]}"
+        command="${BASH_REMATCH[2]}"
+        [[ "$history_num" == "$__nerds_last_history_num" ]] && return 0
+        __nerds_last_history_num="$history_num"
+        __nerds_record_sequence=$((__nerds_record_sequence + 1))
+
+        # Use NUL separators. Never eval or interpolate the command as shell.
+        # Failures are silent; the transcript recorder remains independent.
+        printf '%s\0%s\0%s\0%s\0' \
+            "$__nerds_record_sequence" "$$" "$exit_code" "$command" \
+            | /usr/bin/python3 /home/user/services/xterm/record_prompt.py \
+                >/dev/null 2>&1 || :
+    fi
+    return 0
+}
+
+# Preserve existing string PROMPT_COMMAND actions when possible.
+if declare -p PROMPT_COMMAND 2>/dev/null | grep -q '^declare -a'; then
+    PROMPT_COMMAND=(__nerds_after_command "${PROMPT_COMMAND[@]}")
+else
+    PROMPT_COMMAND="__nerds_after_command${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+fi
+
+# Do not treat rcfile setup statements as participant commands.
+# This shell uses an empty, in-memory history at startup.
+history -c

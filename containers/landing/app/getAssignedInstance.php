@@ -5,7 +5,7 @@
 //! of the MIT license.  See the LICENSE file for details.
 
 
-define('__DIR__', dirname(__FILE__)); 
+
 require_once(__DIR__."/../webpageConf/config.php");
 require_once('util.php');
 $connect = new PDO("pgsql:host=$dbhost;dbname=$dbname", $dbuser, $dbpass);

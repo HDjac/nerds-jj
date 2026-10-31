@@ -1,16 +1,12 @@
 {
   "manifest_version": 3,
   "name": "NERDS LLM Prompt Logger",
-  "version": "0.6",
-  "description": "Logs prompts and selected models submitted to ChatGPT, Claude, and Gemini during the NERDS study environment.",
+  "version": "0.8.1",
+  "description": "Captures supported AI prompts and task-attributed browser navigation/search observations in NERDs.",
   "permissions": [
-    "https://chatgpt.com/*",
-    "https://*.openai.com/*",
-    "https://claude.ai/*",
-    "https://gemini.google.com/*",
-    "http://127.0.0.1:60000/*",
-    "http://localhost:60000/*",
-    "storage"
+    "storage",
+    "webNavigation",
+    "alarms"
   ],
   "content_scripts": [
     {
@@ -20,16 +16,29 @@
         "https://claude.ai/*",
         "https://gemini.google.com/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "background": {
-    "scripts": ["background.js"]
+    "scripts": [
+      "background.js",
+      "browser-events.js"
+    ]
   },
   "browser_specific_settings": {
     "gecko": {
       "id": "chatgpt-prompt-logger@nerds.local"
     }
-  }
+  },
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://*.openai.com/*",
+    "https://claude.ai/*",
+    "https://gemini.google.com/*",
+    "http://127.0.0.1:60000/*",
+    "http://localhost:60000/*"
+  ]
 }

@@ -1,0 +1,10 @@
+services:
+  nginx:
+    container_name: nerds-pilot1-nginx-private
+    ports: !override
+      - "127.0.0.1:18443:443"
+    volumes:
+      - "${HOME}/nerds-pilot-runtime/completion-receipts:/usr/share/nginx/html/nerds-completion-status:ro"
+
+  submit:
+    container_name: nerds-pilot1-submit

@@ -53,3 +53,13 @@
   font-size: 0.95rem;
   line-height: 1.3;
 }
+/* Pilot 1 finish task action */
+.pilotFinishControls { margin-top: 1rem; padding: 0.75rem 0; border-top: 1px solid #777; }
+.pilotFinishControls button { width: 100%; padding: 0.6rem; cursor: pointer; }
+.pilotFinishControls button:disabled { cursor: default; opacity: 0.7; }
+.pilotFinishControls p { font-size: 0.88rem; line-height: 1.35; }
+
+/* Distinguish voluntary stop-early from participant-reported completion. */
+.pilotOutcomeButtons { display: flex; flex-direction: column; gap: 0.5rem; }
+.pilotOutcomeButtons .pilotSkipButton { background: #fff3dd; border: 1px solid #8c6b33; }
+.pilotFinishControls .pilotSkipExplanation { font-size: 0.88rem; line-height: 1.4; }

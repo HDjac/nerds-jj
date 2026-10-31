@@ -12,6 +12,7 @@ services:
       - "80:80"
       - "443:443"
     secrets:
+      - pilot1_ai_gateway_token
       - pub_cert
       - priv_key
 
@@ -50,6 +51,13 @@ services:
       - main
 
   submit:
+    environment:
+      PILOT1_AI_INGEST_ENABLED: "1"
+    secrets:
+      - pilot1_ai_gateway_token
+      - pilot1_ai_db_password
+    volumes:
+      - "${HOME}/nerds-pilot-runtime/registry:/run/nerds/registry:ro"
     build: ./containers/submit
     depends_on:
       - db
@@ -83,6 +91,10 @@ networks:
         - subnet: 192.168.150.0/24
 
 secrets:
+  pilot1_ai_db_password:
+    file: ${HOME}/nerds-pilot-runtime/secrets/pilot1_ai_db_password
+  pilot1_ai_gateway_token:
+    file: ${HOME}/nerds-pilot-runtime/secrets/pilot1_ai_gateway_token
   pub_cert:
     file: /etc/cert/developer-study.crt
   priv_key:

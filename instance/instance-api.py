@@ -2,6 +2,8 @@ import os.path
 import logging
 import os
 import json
+import re
+from browser_extension_origin import active_nerds_extension_origin
 import tempfile
 import urllib.request as url_request
 from flask import Flask, request, redirect, make_response, jsonify, abort
@@ -13,6 +15,77 @@ import config as CONFIG
 from firefox import get_firefox_history
 
 app = Flask(__name__)
+
+@app.route("/api/workspace/activate", methods=["POST"])
+def activate_workspace():
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid request"}), 400
+
+    target = data.get("target")
+
+    if target not in ("cli", "browser"):
+        return jsonify({"error": "Invalid workspace"}), 400
+
+    env = os.environ.copy()
+    env["DISPLAY"] = ":1"
+    env["XAUTHORITY"] = "/home/user/.Xauthority"
+
+    try:
+        result = run(
+            ["wmctrl", "-lx"],
+            stdout=PIPE,
+            stderr=PIPE,
+            text=True,
+            env=env,
+            timeout=5,
+            check=True
+        )
+
+        window_id = None
+
+        for line in result.stdout.splitlines():
+            parts = line.split(None, 4)
+
+            if len(parts) < 3:
+                continue
+
+            current_id = parts[0]
+            window_class = parts[2].lower()
+
+            if target == "cli" and window_class == "xterm.xterm":
+                window_id = current_id
+                break
+
+            if target == "browser" and window_class.endswith(".firefox-esr"):
+                window_id = current_id
+                break
+
+        if window_id is None:
+            return jsonify({
+                "error": f"{target} window not available"
+            }), 503
+
+        run(
+            ["wmctrl", "-ia", window_id],
+            stdout=PIPE,
+            stderr=PIPE,
+            env=env,
+            timeout=5,
+            check=True
+        )
+
+        return jsonify({
+            "status": "success",
+            "active": target
+        })
+
+    except (CalledProcessError, TimeoutExpired, OSError):
+        app.logger.exception("Workspace activation failed")
+        return jsonify({
+            "error": "Unable to activate workspace"
+        }), 500
 
 def send_recv_data(data: dict, endpoint:str="/submit") -> bytes:
     """Send and receive data with authorization information"""
@@ -37,7 +110,12 @@ def send_recv_data(data: dict, endpoint:str="/submit") -> bytes:
 
 @app.route("/")
 def setup():
-    # Welcome to the study
+    # Pilot 1 uses PostgreSQL-backed sessions and
+    # Nginx authorization instead of legacy URL tokens.
+    if getattr(CONFIG, "PILOT1_MODE", False):
+        return redirect("nb/")
+
+    # Legacy
     user_id = request.args.get('userId')
     token = request.args.get('token')
 
@@ -82,6 +160,7 @@ def log_llm_prompt():
         client_timestamp = data.get("timestamp")
         payload = {
             "type": "llm_prompt",
+            "interaction_id": data.get("interaction_id"),
             # The extension supplies `service` and `model`; default sensibly
             # for older clients that only send the ChatGPT prompt fields.
             "service": data.get("service") or "chatgpt",
@@ -91,7 +170,28 @@ def log_llm_prompt():
             # Stored as character varying
             "client_timestamp": str(client_timestamp) if client_timestamp is not None else None,
         }
-        send_recv_data(payload)
+        if getattr(CONFIG, "PILOT1_MODE", False):
+            # The private Nginx gateway authenticates container attribution.
+            # Do not forward legacy user_id/token to the Pilot 1 database.
+            pilot_payload = {
+                "interaction_id": payload.get("interaction_id"),
+                "service": payload["service"],
+                "model": payload["model"],
+                "prompt": payload["prompt"],
+                "url": payload["url"],
+                "client_timestamp": payload["client_timestamp"],
+            }
+            req = url_request.Request(
+                CONFIG.DB_URL.rstrip("/") + "/pilot1/ai-prompt",
+                data=json.dumps(pilot_payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with url_request.urlopen(req, timeout=10) as upstream:
+                if upstream.status != 200:
+                    raise RuntimeError("AI ingestion not acknowledged")
+        else:
+            send_recv_data(payload)
 
         response = jsonify({"ok": True})
         response.headers["Access-Control-Allow-Origin"] = "*"
@@ -101,6 +201,90 @@ def log_llm_prompt():
         response = jsonify({"ok": False, "error": str(e)})
         response.headers["Access-Control-Allow-Origin"] = "*"
         return response, 500
+
+# CORS access is limited to Firefox extension pages and these two
+# browser-observation endpoints; this is not an authentication boundary.
+@app.after_request
+def nerds_browser_extension_cors(response):
+    if not getattr(CONFIG, "PILOT1_MODE", False):
+        return response
+    if request.path not in (
+        "/api/pilot1/browser-context", "/log-browser-event"
+    ):
+        return response
+
+    origin = request.headers.get("Origin", "")
+    response.vary.add("Origin")
+    trusted_origin = active_nerds_extension_origin()
+    if trusted_origin is not None and origin == trusted_origin:
+        response.headers["Access-Control-Allow-Origin"] = trusted_origin
+        response.headers["Access-Control-Allow-Methods"] = (
+            "GET, OPTIONS" if request.path == "/api/pilot1/browser-context"
+            else "POST, OPTIONS"
+        )
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Max-Age"] = "600"
+    return response
+
+
+# Browser observations are intentionally distinct from AI prompt transcripts.
+# The trusted gateway must authenticate container identity and call the dedicated
+# browser ingestion DB function; never reuse /pilot1/ai-prompt for this data.
+@app.route("/api/pilot1/browser-context", methods=["GET"])
+def pilot1_browser_context():
+    if not getattr(CONFIG, "PILOT1_MODE", False):
+        abort(404)
+    try:
+        import uuid
+        with open("/opt/nerds/released-reference/active-task.json") as handle:
+            meta = json.load(handle)
+        task = str(uuid.UUID(str(meta["task_run_id"])))
+        if meta.get("status") not in ("ready", "active"):
+            raise ValueError("Task not released")
+    except (KeyError, ValueError, OSError, TypeError):
+        return jsonify({"error": "Active task unavailable"}), 503
+    response = jsonify({"task_run_id": task})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/log-browser-event", methods=["POST"])
+def pilot1_browser_event():
+    if not getattr(CONFIG, "PILOT1_MODE", False):
+        abort(404)
+    from browser_observation import InvalidObservation, normalize_event
+    try:
+        with open("/opt/nerds/released-reference/active-task.json") as handle:
+            meta = json.load(handle)
+    except (OSError, ValueError):
+        return jsonify({"error": "Task metadata unavailable"}), 503
+    try:
+        payload = normalize_event(request.get_json(silent=True), meta)
+    except InvalidObservation as exc:
+        status = 409 if str(exc) in ('Stale task context', 'Task not released') else 400
+        return jsonify({"error": str(exc)}), status
+    try:
+        request_bytes = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        upstream = url_request.Request(
+            CONFIG.DB_URL.rstrip("/") + "/pilot1/browser-event",
+            data=request_bytes,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with url_request.urlopen(upstream, timeout=10) as result:
+            if result.status != 200:
+                raise RuntimeError("Browser observation not acknowledged")
+    except url_request.HTTPError as exc:
+        # 409 is a stale task on the backend; never reassign it to the next task.
+        if exc.code == 409:
+            return jsonify({"error": "Task changed before ingestion"}), 409
+        app.logger.warning("Browser ingest HTTP error: %d", exc.code)
+        return jsonify({"error": "Browser ingestion unavailable"}), 503
+    except Exception:
+        app.logger.exception("Browser observation ingestion unavailable")
+        return jsonify({"error": "Browser ingestion unavailable"}), 503
+    return jsonify({"ok": True}), 200
+
 
 TESTING_DIR = "/home/user/testing"
 COMPILE_TIMEOUT = 120  # seconds
@@ -288,8 +472,210 @@ TASK_DEFINITIONS = [
     },
 ]
 
+@app.route("/api/pilot1/request-task-outcome", methods=["POST"])
+@app.route("/api/pilot1/request-finish", methods=["POST"])
+def pilot1_request_finish():
+    """Record participant choice only. The trusted host advances the task.
+
+    The legacy request-finish route defaults to completed for existing clients.
+    A recorded choice is immutable until the host processes it.
+    """
+    if not getattr(CONFIG, "PILOT1_MODE", False):
+        abort(404)
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "Expected JSON request"}), 400
+    outcome = data.get("outcome", "completed")
+    if outcome not in ("completed", "skipped"):
+        return jsonify({"error": "Invalid task outcome"}), 400
+    meta_path = "/opt/nerds/released-reference/active-task.json"
+    try:
+        with open(meta_path) as handle:
+            meta = json.load(handle)
+    except (OSError, ValueError):
+        return jsonify({"error": "Task metadata unavailable"}), 503
+    code, pos = meta.get("task_code"), meta.get("position")
+    if (code not in ("dense_v2", "lowyield_v1") or
+        type(pos) is not int or pos not in (1, 2) or
+        code != data.get("task_code") or pos != data.get("position") or
+        meta.get("status") in ("completed", "skipped")):
+        return jsonify({"error": "Task request does not match current task"}), 409
+
+    marker = "/home/user/fuzz-study/.finish-request.json"
+    import secrets
+    import stat
+    from datetime import timezone
+
+    def read_existing():
+        st = os.lstat(marker)
+        if not stat.S_ISREG(st.st_mode) or st.st_size >= 2048:
+            raise ValueError("Unsafe outcome request marker")
+        with open(marker) as handle:
+            recorded = json.load(handle)
+        recorded_outcome = recorded.get("outcome", "completed")
+        if (recorded.get("task_code") != code or
+            recorded.get("position") != pos or
+            recorded_outcome not in ("completed", "skipped")):
+            raise ValueError("Pending request belongs to another task")
+        token = recorded.get("completion_receipt")
+        if pos == 2 and (not isinstance(token, str) or
+                         __import__("re").fullmatch(r"[0-9a-f]{64}", token) is None):
+            raise ValueError("Final outcome receipt is missing or invalid")
+        return recorded_outcome, token
+
+    def acknowledged(result):
+        previous_outcome, token = result
+        response = {"ok": True, "outcome": previous_outcome,
+                    "state": "awaiting_operator"}
+        if pos == 2:
+            response["completion_receipt"] = token
+        final = jsonify(response)
+        final.headers["Cache-Control"] = "no-store"
+        return final, 202
+
+    if os.path.lexists(marker):
+        try:
+            pending = read_existing()
+        except (ValueError, OSError):
+            return jsonify({"error": "Existing task request needs operator review"}), 409
+        if pending[0] != outcome:
+            return jsonify({"error": "A different task outcome is already pending"}), 409
+        return acknowledged(pending)
+
+    entry = {"task_code": code, "position": pos, "outcome": outcome,
+             "requested_at": datetime.now(timezone.utc).isoformat(),
+             "request_id": secrets.token_hex(16)}
+    if pos == 2:
+        entry["completion_receipt"] = secrets.token_hex(32)
+    tmp = marker + "." + secrets.token_hex(8) + ".tmp"
+    try:
+        with open(tmp, "x") as handle:
+            json.dump(entry, handle)
+            handle.flush()
+            os.fsync(handle.fileno())
+        # Atomic no-overwrite creation; cannot silently change Finish into Skip
+        # (or vice versa) if requests arrive close together.
+        os.link(tmp, marker)
+    except FileExistsError:
+        try:
+            pending = read_existing()
+        except (ValueError, OSError):
+            return jsonify({"error": "Existing task request needs operator review"}), 409
+        if pending[0] != outcome:
+            return jsonify({"error": "A different task outcome is already pending"}), 409
+        return acknowledged(pending)
+    except OSError:
+        return jsonify({"error": "Unable to record task outcome"}), 503
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+    return acknowledged((outcome, entry.get("completion_receipt")))
+
+
 @app.route("/api/tasks")
 def get_tasks():
+    if getattr(CONFIG, "PILOT1_MODE", False):
+        metadata_path = (
+            "/opt/nerds/released-reference/active-task.json"
+        )
+
+        try:
+            with open(metadata_path, "r") as f:
+                active_task = json.load(f)
+        except (OSError, ValueError):
+            return jsonify({
+                "error": "Active task has not been provisioned"
+            }), 503
+
+        if active_task.get("status") in ("completed", "skipped"):
+            response = jsonify({"mode": "pilot1", "completed": True,
+                                "final_outcome": active_task["status"],
+                                "tasks": []})
+            response.headers["Cache-Control"] = "no-store"
+            return response
+
+        task_code = active_task.get("task_code")
+        position = active_task.get("position")
+
+        descriptions = {
+            "dense_v2": (
+                "<h2>Dense v2 — Fuzzing Investigation</h2>"
+                "<p>Investigate the provided C program using "
+                "coverage-guided fuzzing.</p>"
+                "<p>Examine the target source, available harnesses, "
+                "and seed inputs. Select or adapt a harness, execute "
+                "fuzzing campaigns, and investigate the feedback.</p>"
+                "<p><strong>Working directory:</strong><br>"
+                "<code>/home/user/fuzz-study/work</code></p>"
+                "<p>You may modify your working files, experiment "
+                "with different approaches, and use the internal "
+                "browser as needed.</p>"
+            ),
+            "lowyield_v1": (
+                "<h2>Low-Yield v1 — Fuzzing Investigation</h2>"
+                "<p>Investigate the provided C program using "
+                "coverage-guided fuzzing.</p>"
+                "<p>Examine the available harnesses, run fuzzing "
+                "campaigns, and analyze their results.</p>"
+                "<p><strong>Working directory:</strong><br>"
+                "<code>/home/user/fuzz-study/work</code></p>"
+            ),
+        }
+
+        if (
+            task_code not in descriptions
+            or type(position) is not int
+            or position not in (1, 2)
+        ):
+            return jsonify({
+                "error": "Invalid active task metadata"
+            }), 503
+
+        if not os.path.isfile(
+            "/home/user/fuzz-study/work/Makefile"
+        ):
+            return jsonify({
+                "error": "Task workspace is unavailable"
+            }), 503
+
+        pending_outcome = None
+        completion_receipt = None
+        marker = "/home/user/fuzz-study/.finish-request.json"
+        try:
+            import stat
+            st = os.lstat(marker)
+            if stat.S_ISREG(st.st_mode) and 0 < st.st_size < 2048:
+                with open(marker) as handle:
+                    pending = json.load(handle)
+                if (pending.get("task_code") == task_code and
+                    pending.get("position") == position):
+                    value = pending.get("outcome", "completed")
+                    if value in ("completed", "skipped"):
+                        pending_outcome = value
+                        receipt = pending.get("completion_receipt")
+                        if (position == 2 and isinstance(receipt, str) and
+                            __import__("re").fullmatch(r"[0-9a-f]{64}", receipt)):
+                            completion_receipt = receipt
+        except (OSError, ValueError):
+            pass
+
+        response = jsonify({
+            "mode": "pilot1",
+            "pending_outcome": pending_outcome,
+            "completion_receipt": completion_receipt,
+            "tasks": [{
+                "task_no": position,
+                "position": position,
+                "task_code": task_code,
+                "title": task_code,
+                "desc": descriptions[task_code],
+            }],
+        })
+
+        response.headers["Cache-Control"] = "no-store"
+        return response
     tasks = []
     for definition in TASK_DEFINITIONS:
         with open(os.path.join(TASKS_DIR, definition["file"])) as f:

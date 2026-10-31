@@ -1,0 +1,30 @@
+#!/bin/sh
+
+export DISPLAY=:1
+export XAUTHORITY=/home/user/.Xauthority
+
+# Wait for the NERDs graphical display.
+while [ ! -S /tmp/.X11-unix/X1 ]; do
+    sleep 1
+done
+
+cd /home/user/fuzz-study || exit 1
+
+umask 077
+LOG_DIR=/home/user/.nerds-cli-recordings
+mkdir -p "$LOG_DIR" || exit 1
+SESSION_TAG="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+export NERDS_CLI_SESSION_TAG="$SESSION_TAG"
+export HISTFILE=/dev/null
+
+# xterm and script preserve the output + timing transcript. Interactive Bash
+# separately writes best-effort structured command events to .commands.jsonl.
+exec xterm \
+    -title "NERDs CLI" \
+    -geometry 110x32 \
+    -xrm 'XTerm*selectToClipboard: true' \
+    -e /usr/bin/script \
+        -q -f -e \
+        --log-out "$LOG_DIR/$SESSION_TAG.out" \
+        --log-timing "$LOG_DIR/$SESSION_TAG.timing" \
+        --command '/bin/bash --rcfile /home/user/services/xterm/nerds-bashrc -i'

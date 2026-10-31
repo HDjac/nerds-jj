@@ -1,5 +1,5 @@
 <?php
-define('__DIR__', dirname(__FILE__));
+
 require_once(__DIR__."/../webpageConf/config.php");
 require_once('util.php');
 

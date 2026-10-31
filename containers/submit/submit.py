@@ -3,12 +3,19 @@
 #! This software may be modified and distributed under the terms
 #! of the MIT license.  See the LICENSE file for details.
 
+import os
+import logging
 from flask import Flask
 from flask import request
 from flask import make_response
 from flask import jsonify
 from flask import abort
 from flask_sqlalchemy import SQLAlchemy
+from pilot1_ai_payload import normalize_prompt
+from pilot1_ai_auth import authenticate_ai_request
+from pilot1_ai_db import store_ai_prompt
+from pilot1_browser_db import store_browser_event
+from pilot1_browser_payload import normalize_browser_observation
 from sqlalchemy.dialects.postgresql import JSON
 import datetime
 import json
@@ -19,6 +26,12 @@ from flask import redirect, request, current_app
 
 app = Flask(__name__)
 app.config.from_object('configSubmit')
+app.config['PILOT1_AI_INGEST_ENABLED'] = (
+    os.environ.get('PILOT1_AI_INGEST_ENABLED', '0') == '1'
+)
+app.config['PILOT1_BROWSER_INGEST_ENABLED'] = (
+    os.environ.get('PILOT1_BROWSER_INGEST_ENABLED', '0') == '1'
+)
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 MAX_LENGTH = 1000000 #max length for json size
@@ -219,6 +232,99 @@ def redirectToSurvey(userid, token):
 
     print(url)
     return redirect(url, code=302)
+
+
+
+@app.route('/pilot1/ai-prompt', methods=['POST'])
+def pilot1_ai_prompt():
+    """Authenticated Pilot 1 prompt ingestion."""
+    if not app.config.get('PILOT1_AI_INGEST_ENABLED', False):
+        return jsonify({'error': 'AI ingestion disabled'}), 503
+
+    try:
+        trusted_instance_id = authenticate_ai_request(
+            remote_addr=request.remote_addr,
+            headers=request.headers,
+            registry_path=app.config.get(
+                'PILOT1_AI_REGISTRY_PATH',
+                '/run/nerds/registry/participants.json'
+            ),
+            secret_path=app.config.get(
+                'PILOT1_AI_GATEWAY_SECRET_PATH',
+                '/run/secrets/pilot1_ai_gateway_token'
+            )
+        )
+    except PermissionError:
+        return jsonify({'error': 'Unauthorized AI ingestion request'}), 403
+
+    try:
+        observation = normalize_prompt(request.get_json(silent=True))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid AI observation'}), 400
+
+    try:
+        stored = store_ai_prompt(trusted_instance_id, observation)
+    except Exception as exc:
+        # Duplicate UUID with different content raises a database exception.
+        # All other failures fail closed; never falsely acknowledge capture.
+        if 'Conflicting interaction UUID' in str(exc):
+            return jsonify({'error': 'Conflicting interaction UUID'}), 409
+        app.logger.exception('Pilot 1 AI ingestion failed')
+        return jsonify({'error': 'AI ingestion temporarily unavailable'}), 503
+
+    return jsonify({'ok': True, 'event_id': stored['event_id'],
+                    'inserted': stored['inserted']}), 200
+
+
+@app.route('/pilot1/browser-event', methods=['POST'])
+def pilot1_browser_event():
+    """Browser events via the same authenticated instance gateway as AI prompts."""
+    if not app.config.get('PILOT1_BROWSER_INGEST_ENABLED', False):
+        return jsonify({'error': 'Browser ingestion disabled'}), 503
+
+    # Reject large requests before parsing JSON (and enforce a bound for
+    # chunked requests using Werkzeug's maximum content length).
+    if request.content_length is not None and request.content_length > 16384:
+        return jsonify({'error': 'Browser observation too large'}), 413
+
+    try:
+        trusted_instance_id = authenticate_ai_request(
+            remote_addr=request.remote_addr,
+            headers=request.headers,
+            registry_path=app.config.get(
+                'PILOT1_AI_REGISTRY_PATH',
+                '/run/nerds/registry/participants.json'
+            ),
+            secret_path=app.config.get(
+                'PILOT1_AI_GATEWAY_SECRET_PATH',
+                '/run/secrets/pilot1_ai_gateway_token'
+            )
+        )
+    except PermissionError:
+        return jsonify({'error': 'Unauthorized browser ingestion'}), 403
+
+    try:
+        normalized = normalize_browser_observation(request.get_json(silent=True))
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid browser observation'}), 400
+
+    try:
+        stored = store_browser_event(trusted_instance_id, normalized)
+    except Exception as exc:
+        # Stale task observations are terminally rejected, not rebound to
+        # whichever task is now active; duplicate UUID conflicts also 409.
+        reason = str(exc)
+        if ('Stale task browser observation' in reason or
+                'Conflicting browser event UUID' in reason or
+                'No released task' in reason):
+            return jsonify({'error': 'Stale or conflicting browser event'}), 409
+        if 'No eligible study session' in reason:
+            return jsonify({'error': 'No eligible active session'}), 403
+        app.logger.exception('Pilot 1 browser ingestion failed')
+        return jsonify({'error': 'Browser ingestion unavailable'}), 503
+
+    return jsonify({'ok': True, 'event_id': stored['event_id'],
+                    'inserted': stored['inserted']}), 200
 
 
 @app.route('/submit', methods=['POST'])

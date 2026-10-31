@@ -62,8 +62,14 @@ function get_tasks() {
    */
 
   if (BACKEND_PRESENT) {
-    return fetch(`${API_BASE_PATH}/tasks`).then((res) => {
-      return res.json();
+    return fetch(`${API_BASE_PATH}/tasks`, {cache: "no-store"}).then(async (res) => {
+      const type = res.headers.get("content-type") || "";
+      if (!type.includes("application/json")) {
+        throw new Error("Your NERDs session may have expired. Please open a fresh invitation to continue.");
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Task service error: ${res.status}`);
+      return data;
     });
   } else {
     console.debug("Sending debug response to get_tasks call");
@@ -98,6 +104,24 @@ function get_tasks() {
   }
 }
 
+function requestPilotTaskOutcome(task, outcome) {
+  if (!["completed", "skipped"].includes(outcome)) {
+    return Promise.reject(new Error("Invalid task outcome"));
+  }
+  return fetch(`${API_BASE_PATH}/pilot1/request-task-outcome`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({task_code: task.task_code, position: task.position, outcome})
+  }).then(async response => {
+    if (!(response.headers.get("content-type") || "").includes("application/json")) {
+      throw new Error("Your NERDs session may have expired. Please open a fresh invitation to continue.");
+    }
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || `Task outcome request failed: ${response.status}`);
+    return payload;
+  });
+}
+
 function set_resolution(width, height) {
   return fetch(`${API_BASE_PATH}/resolution`, {
     method: "POST",
@@ -108,5 +132,35 @@ function set_resolution(width, height) {
   });
 }
 
+function activateWorkspace(target) {
+  if (!["cli", "browser"].includes(target)) {
+    return Promise.reject(new Error("Invalid workspace"));
+  }
 
-export {submit, get_tasks, set_resolution, compile}
+  if (!BACKEND_PRESENT) {
+    return Promise.resolve({active: target});
+  }
+
+  return fetch(`${API_BASE_PATH}/workspace/activate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({target})
+  }).then(async (response) => {
+    if (!response.ok) {
+      throw new Error(`Workspace activation failed: ${response.status}`);
+    }
+
+    return response.json();
+  });
+}
+
+export {
+  submit,
+  get_tasks,
+  set_resolution,
+  compile,
+  activateWorkspace,
+  requestPilotTaskOutcome
+};

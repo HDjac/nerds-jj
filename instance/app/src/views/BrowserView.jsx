@@ -460,17 +460,24 @@ export default function BrowserView(props) {
 
     const text = stat.detail.text;
 
-    /*
-    * Always remember the latest Linux selection, but do not immediately
-    * make it the NERDS clipboard unless Copy/Cut was explicitly used.
-    */
+    // CLI terminal clipboard:
+    // Save text received from xterm as internal clipboard content.
+    if (props.currentTab === "cli") {
+      if (text !== getInternalClipboard()) {
+        setInternalClipboard(text, "internal_cli");
+      }
+
+      console.log("CLI clipboard received by NERDs");
+      return;
+    }
+
+    // Preserve existing Firefox clipboard behavior.
     browserSelectionCandidate.current = text;
 
     if (!browserCopyPending.current) {
       console.log(
         "Browser selection cached but not copied"
       );
-
       return;
     }
 
@@ -481,8 +488,8 @@ export default function BrowserView(props) {
       "internal_browser"
     );
 
-    console.log(
-      "Explicit browser copy saved to NERDS clipboard"
+   console.log(
+      "Explicit browser copy saved to NERDs clipboard"
     );
   }
 
@@ -562,6 +569,11 @@ export default function BrowserView(props) {
    */
   useEffect(() => {
     function handleInternalClipboardEvent(event) {
+      // The CLI clipboard already originated inside VNC.
+      // Do not immediately send it back to VNC.
+      if (event.detail?.source === "internal_cli") {
+        return;
+      }
       /*
       * A newer editor copy replaces any earlier pending browser copy.
       */

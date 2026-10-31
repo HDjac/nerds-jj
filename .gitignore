@@ -18,3 +18,12 @@ generator/tasks.json.save
 instance/config.py
 manager/manager_config.py
 *.log
+
+# NERDs local pilot temporary artifacts
+/*.zip
+*:Zone.Identifier
+*.bak
+*.before-*
+__pycache__/
+*.pyc
+.pytest_cache/

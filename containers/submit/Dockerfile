@@ -7,6 +7,13 @@ WORKDIR /home/user/app
 RUN pip install SQLAlchemy Flask-SQLAlchemy psycopg2 pygments
 
 COPY --chown=user:user submit.py main.py
+COPY --chown=user:user pilot1_ai_payload.py .
+COPY --chown=user:user pilot1_ai_gateway.py .
+COPY --chown=user:user pilot1_ai_registry.py .
+COPY --chown=user:user pilot1_ai_auth.py .
+COPY --chown=user:user pilot1_ai_db.py .
+COPY --chown=user:user pilot1_browser_db.py .
+COPY --chown=user:user pilot1_browser_payload.py .
 COPY --chown=user:user configSubmit.py .
 COPY --chown=user:user tasks/ ./tasks/
 

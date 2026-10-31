@@ -1,6 +1,6 @@
 <?php
 // Various utility functions used around the code
-define('__DIR__', dirname(__FILE__));
+
 require_once(__DIR__."/../webpageConf/config.php");
 
 function checkToken($token1, $token2) {

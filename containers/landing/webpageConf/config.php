@@ -6,7 +6,7 @@
 
 $dailyMaxInstances = 10;
 // Hard limit, incase someone finds a way to abuse it
-$maxInstances = 200;
+$maxInstances = 20;
 
 
 // Register API keys at https://www.google.com/recaptcha/admin
@@ -38,7 +38,7 @@ $redisQueue = 'queuedInstances';
 $redisQueueBooting = 'queuedInstancesBooting';
 $waitTimeoutForInstance = 120;
 
-$poolSize = 5;
+$poolSize = 1;
 $poolCheckCommand = "nohup /usr/bin/php /var/www/tools/checkServerPool.php > /dev/null 2>&1 & echo $!";
 
 $tokenGetUrl = '';

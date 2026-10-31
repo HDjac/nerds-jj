@@ -1,5 +1,5 @@
 <?php
-define('__DIR__', dirname(__FILE__));
+
 require_once(__DIR__."/../webpageConf/config.php");
 require_once('util.php');
 
@@ -15,7 +15,7 @@ function participantExists($csvFile, $participantId) {
         return false;
     }
 
-    $header = fgetcsv($file);
+    $header = fgetcsv($file, 0, ',', '"', '');
     if ($header === false) {
         fclose($file);
         return false;
@@ -28,7 +28,7 @@ function participantExists($csvFile, $participantId) {
         return false;
     }
 
-    while (($data = fgetcsv($file)) !== false) {
+    while (($data = fgetcsv($file, 0, ',', '"', '')) !== false) {
         $rowPid = trim($data[$pidIndex] ?? "");
 
         if ($rowPid === $participantId) {

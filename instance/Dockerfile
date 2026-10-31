@@ -10,6 +10,12 @@ RUN npm run build
 FROM debian:stable-slim
 RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -yqq \
     build-essential \
+    clang \
+    libclang-rt-dev \
+    xterm \
+    xfonts-base \
+    unzip \
+    wmctrl \
     python3 \
     python3-dev \
     python3-flask \
@@ -64,7 +70,28 @@ COPY ./token.cfg /etc/websockify/token.cfg
 COPY --chown=user:user ./testing ./testing
 # Starting code for the three coding tasks, served by /api/tasks
 COPY --chown=user:user ./read.c ./write.c ./fix.c ./tasks/
+
+# Store both original fuzzing tasks in protected storage.
+# Participant processes must not access unreleased task materials.
+USER root
+
+COPY ./fuzzing/ /opt/nerds/task-bundles/
+
+RUN chown -R root:root /opt/nerds/task-bundles \
+    && chmod -R go-rwx /opt/nerds/task-bundles \
+    && install -d -o user -g user -m 0755 /home/user/fuzz-study
+
+# All normal NERDs services continue as the unprivileged user.
+USER user
+
 COPY --chown=user:user ./services ./services
+# runsv executes the run files directly; copying from a checkout can strip the
+# executable bit even when their shebangs are valid.
+USER root
+RUN find /home/user/services -mindepth 2 -maxdepth 2 -type f -name run \
+        -exec chmod 0755 {} + \
+    && test -x /home/user/services/xterm/run
+USER user
 
 # Warm the emscripten cache (system libs for the exact flags /api/compile
 # uses) so the first user-triggered compile doesn't take minutes.
@@ -78,6 +105,8 @@ RUN emcc -I testing tasks/read.c testing/test_username.c -o /tmp/warmup.js \
 #WORKDIR /home/user/app
 COPY --chown=user:user ./firefox.py .
 COPY --chown=user:user ./instance-api.py .
+COPY --chown=user:user ./browser_observation.py .
+COPY --chown=user:user ./browser_extension_origin.py .
 COPY ./config.py .
 COPY --from=build --chown=user:user /app/build /home/user/www
 #RUN cd /home/user/app && \

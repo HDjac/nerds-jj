@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>NERDs Study — Completion</title>
+  <style>
+    :root{color-scheme:light;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f4f6f9;color:#192d46}
+    main{box-sizing:border-box;width:min(92vw,610px);padding:clamp(24px,5vw,48px);border-radius:18px;background:white;box-shadow:0 8px 36px #1c355117}
+    .seal{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:#e9f6ef;color:#187b4f;font-size:28px;font-weight:700}
+    h1{font-size:clamp(25px,5vw,34px);margin:24px 0 10px;line-height:1.2}
+    p{line-height:1.65;color:#465970}
+    a.action{display:inline-block;padding:12px 18px;margin-top:14px;border-radius:9px;background:#173e68;color:#fff;text-decoration:none;font-weight:600}
+    .muted{font-size:14px;color:#67758a}
+    #survey{display:none}
+  </style>
+</head>
+<body>
+ <main>
+  <div class="seal" aria-hidden="true">✓</div>
+  <h1 id="heading">Verifying completion</h1>
+  <p id="message" role="status">Checking whether your study session has finished. This page will update automatically.</p>
+  <section id="survey" aria-label="Exit survey">
+   <p>Next, please complete the exit survey.</p>
+   <a id="survey-link" class="action" rel="noreferrer noopener" href="#">Continue to exit survey</a>
+   <p id="countdown" class="muted" role="status"></p>
+  </section>
+  <p class="muted" id="footer">This page does not display personal information or provide access to the study workspace.</p>
+ </main>
+ <script>
+  (async function () {
+    const heading = document.getElementById('heading');
+    const message = document.getElementById('message');
+    const receipt = new URLSearchParams(window.location.hash.slice(1)).get('receipt')
+      || window.sessionStorage.getItem('nerds-pilot1-completion-receipt');
+    // Do not keep the bearer token in the browser's visible URL/history.
+    if (window.location.hash) window.history.replaceState(null, '', '/study-complete');
+    if (!receipt || !/^[a-f0-9]{64}$/.test(receipt)) {
+      heading.textContent = 'Completion confirmation required';
+      message.textContent = 'This page needs a valid completion receipt. ' +
+        'If your study access expired, contact the research team; do not repeat the tasks.';
+      return;
+    }
+    window.sessionStorage.setItem('nerds-pilot1-completion-receipt', receipt);
+    let verified = false;
+    for (let attempt = 0; attempt < 120; attempt++) {
+      try {
+        const response = await fetch('/study-complete/status/' + receipt,
+          {cache:'no-store', credentials:'omit', referrerPolicy:'no-referrer'});
+        if (response.ok) {
+          const state = await response.json();
+          // The status JSON is published by the host after its DB commit.
+          if (state.status === 'completed' &&
+              typeof state.expires_at === 'string' &&
+              Date.parse(state.expires_at) > Date.now()) {
+            verified = true;
+            break;
+          }
+        }
+      } catch (_error) { /* Network interruption; retry for up to 4 minutes. */ }
+      if (attempt < 119) await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    if (!verified) {
+      heading.textContent = 'Confirmation not yet available';
+      message.textContent = 'We could not verify finalization yet. Please keep your completion receipt ' +
+        'and contact the research team if the confirmation does not appear. Do not repeat the tasks.';
+      return;
+    }
+    heading.textContent = 'Study Complete';
+    message.textContent = 'Thank you for participating in the NERDs study. ' +
+      'Your task decisions have been recorded. You may now close this browser window.';
+    // The QuestionPro survey is never shown before verified completion.
+    // Future QuestionPro link is deliberately disabled in Pilot 1 configuration.
+    try {
+      const response = await fetch('/study-complete-config.json', {cache:'no-store', credentials:'omit'});
+      if (!response.ok) return;
+      const config = await response.json();
+      if (config.enabled !== true || typeof config.survey_url !== 'string') return;
+      const url = new URL(config.survey_url);
+      const host = url.hostname.toLowerCase();
+      if (url.protocol !== 'https:' || !(host === 'questionpro.com' || host.endsWith('.questionpro.com')) ||
+          url.username || url.password) return;
+      const link = document.getElementById('survey-link');
+      link.href = url.href;
+      document.getElementById('survey').style.display = 'block';
+      const seconds = Number(config.auto_redirect_seconds);
+      if (!Number.isInteger(seconds) || seconds < 1 || seconds > 60) return;
+      const status = document.getElementById('countdown');
+      let remaining = seconds;
+      status.textContent = `Redirecting to the exit survey in ${remaining} seconds…`;
+      const timer = setInterval(() => {
+        remaining -= 1;
+        if (remaining <= 0) {
+          clearInterval(timer);
+          window.location.replace(url.href);
+          return;
+        }
+        status.textContent = `Redirecting to the exit survey in ${remaining} seconds…`;
+      }, 1000);
+    } catch (_error) {
+      // The standalone thank-you page must remain usable without the config.
+    }
+  })();
+ </script>
+</body>
+</html>

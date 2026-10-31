@@ -6,7 +6,7 @@ console.log("[NERDS LLM Logger] background script loaded");
 const LOG_ENDPOINT = "http://127.0.0.1:60000/log-llm-prompt";
 
 browser.runtime.onMessage.addListener((message) => {
-  console.log("[NERDS LLM Logger] background got message:", message);
+  console.log("[NERDS LLM Logger] prompt event received");
 
   if (message.type !== "LLM_PROMPT") {
     return Promise.resolve({ ok: false, error: "Unknown message type" });

@@ -1,0 +1,29 @@
+.nerdsQuickStart {
+  margin: 1rem 0;
+  padding: 0.8rem;
+  background: #fff;
+  border: 1px solid #777;
+  border-radius: 7px;
+  color: #222;
+}
+.nerdsQuickStartHeading { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+.nerdsQuickStartHeading h4 { margin: 0; font-size: 1.05rem; }
+.nerdsGuideOpen, .nerdsGuideFooter button { border: 1px solid #215795; border-radius: 5px; background: #215795; color: white; font-weight: 600; padding: 0.5rem 0.7rem; cursor: pointer; }
+.nerdsGuideOpen:hover, .nerdsGuideFooter button:hover { background: #174271; }
+.nerdsQuickStart ol { margin: 0.7rem 0 0; padding-left: 1.3rem; }
+.nerdsQuickStart li { margin: 0.45rem 0; }
+.nerdsQuickStart li strong { display: block; }
+.nerdsQuickStart code, .nerdsGuideBody code { display: block; overflow-wrap: anywhere; white-space: pre-wrap; font-size: 0.85rem; padding: 0.4rem; margin: 0.2rem 0; background: #eef1f5; color: #161d27; border-radius: 4px; }
+.nerdsGuideHelp { font-size: 0.84rem; }
+.nerdsGuideBackdrop { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.nerdsGuideDialog { display: flex; flex-direction: column; width: min(760px, 100%); max-height: 90vh; background: white; color: #222; border-radius: 10px; box-shadow: 0 10px 35px rgba(0,0,0,.4); }
+.nerdsGuideDialogHeader { padding: 0.8rem 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #ccc; }
+.nerdsGuideDialogHeader h2 { margin: 0; font-size: 1.4rem; }
+.nerdsGuideClose { border: 1px solid #777; padding: .45rem .6rem; border-radius: 5px; background: #eee; color: #222; cursor: pointer; flex: 0 0 auto; }
+.nerdsGuideBody { padding: .5rem 1.2rem 1.2rem; overflow-y: auto; line-height: 1.5; }
+.nerdsGuideBody h3 { margin-top: 1.3rem; }
+.nerdsGuideBody li { margin: .6rem 0; }
+.nerdsGuideBody dl div { margin: 0.6rem 0; }
+.nerdsGuideBody dt { font-weight: 700; }
+.nerdsGuideBody dd { margin-left: 0; }
+.nerdsGuideFooter { display: flex; justify-content: flex-end; padding: 0.75rem 1rem; border-top: 1px solid #ccc; }

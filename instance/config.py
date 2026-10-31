@@ -2,8 +2,13 @@ LANDING_URL = ""
 APP_MODE = "DEBUG"
 SUBMIT_SECRET = "8y3gCusDsgzYQhKUznLxRDNzNZ1LMZmI"
 USER_DATA_FILE = "/home/user/.instanceinfo"
-DB_URL = "http://nginx"
 TASKFILES_BASE_PATH = "/home/user/tasks/"
+PILOT1_MODE = True
+
+DB_URL = (
+    "http://nerds-pilot1-nginx-private"
+    if PILOT1_MODE else "http://nginx"
+)
 
 # For reading from createdInstances table
 DB_CONFIG = {
