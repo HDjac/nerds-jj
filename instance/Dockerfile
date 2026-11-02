@@ -48,13 +48,12 @@ RUN python3 -c "import pathlib,zipfile; d=pathlib.Path('/opt/nerds-firefox-exten
 COPY ./firefox-policies/policies.json /usr/lib/firefox-esr/distribution/policies.json
 
 RUN useradd -m --shell=/usr/bin/nologin user
-# Prevent participants from minimizing/maximizing the two research desktop
-# windows; the NERDs split/CLI-only/Firefox-only controls handle layout.
-# Keep close available for ordinary Firefox dialog windows.
-RUN install -d -o user -g user /home/user/.config/openbox \
-    && sed 's#<titleLayout>NLIMC</titleLayout>#<titleLayout>NLC</titleLayout>#' \
-       /etc/xdg/openbox/rc.xml > /home/user/.config/openbox/rc.xml \
-    && sed -i 's#</applications>#  <application class="XTerm"><decor>no</decor></application>\n  <application class="firefox-esr"><decor>no</decor></application>\\n</applications>#' /home/user/.config/openbox/rc.xml \
+# Keep native window title bars for orientation while hiding the minimize and
+# maximize buttons; participant layout is controlled by the NERDs toolbar.
+# Per-application <decor>no</decor> rules previously removed the title bars.
+RUN install -d -o user -g user /home/user/.config/openbox \\
+    && sed 's#<titleLayout>NLIMC</titleLayout>#<titleLayout>NLC</titleLayout>#' \\
+       /etc/xdg/openbox/rc.xml > /home/user/.config/openbox/rc.xml \\
     && chown user:user /home/user/.config/openbox/rc.xml
 WORKDIR /home/user
 
