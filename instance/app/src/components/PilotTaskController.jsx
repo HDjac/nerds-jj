@@ -211,29 +211,8 @@ export default function PilotTaskController() {
                 onClick={() => copyInsideNerds(taskDescriptionRef.current?.innerText?.trim(), "Task description")}>Copy task description</button>
             </div>
             <p className="pilotClipboardStatus" role="status" aria-live="polite">{copyStatus}</p>
-            <hr />
-            <p><strong>Current assignment:</strong> Task {task.position} of 2</p>
-            <p><strong>Working directory:</strong></p>
-            <p><code>/home/user/fuzz-study/work</code></p>
-            <p>You may use the CLI and internal browser throughout this task.</p>
             <FuzzingQuickStart onOpen={() => setGuideOpen(true)} showGuideButton={false} />
-            <div className="pilotFinishControls">
-              <div className="pilotOutcomeButtons">
-                <button type="button" disabled={sending || !!pendingOutcome}
-                  onClick={() => requestOutcome("completed")}>
-                  {sending ? "Submitting..." : "Finish Task"}
-                </button>
-                <button type="button" className="pilotSkipButton"
-                  disabled={sending || !!pendingOutcome}
-                  onClick={() => requestOutcome("skipped")}>
-                  Skip Task
-                </button>
-              </div>
-              <p className="pilotSkipExplanation">
-                Choose <strong>Skip Task</strong> if you want to stop working on this task
-                before finishing. Your choice will be recorded, and you will move on.
-              </p>
-            </div>
+
 
           </>
         )}
@@ -241,6 +220,24 @@ export default function PilotTaskController() {
         {task && <ClipboardGuideModal open={clipboardGuideOpen}
           onClose={() => setClipboardGuideOpen(false)} />}
       </div>
+      {task && !pendingOutcome && !completed && (
+        <div className="pilotFinishControls" role="group" aria-label="Task actions">
+          <div className="pilotOutcomeButtons">
+            <button type="button" disabled={sending}
+              onClick={() => requestOutcome("completed")}>
+              {sending ? "Submitting..." : "Finish Task"}
+            </button>
+            <button type="button" className="pilotSkipButton"
+              disabled={sending}
+              onClick={() => requestOutcome("skipped")}>
+              Skip Task
+            </button>
+          </div>
+          <p className="pilotSkipExplanation">
+            Skipping saves your work and ends this task.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
