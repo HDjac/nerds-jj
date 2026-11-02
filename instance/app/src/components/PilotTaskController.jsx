@@ -5,10 +5,9 @@ import { FuzzingQuickStart, FuzzingGuideModal } from "./FuzzingGuide";
 import ClipboardGuideModal from "./ClipboardGuideModal";
 import { get_tasks, requestPilotTaskOutcome } from "../services";
 
-const TASK_NAMES = {
-  dense_v2: "Dense v2",
-  lowyield_v1: "Low-Yield v1",
-};
+// Stable internal task identifiers are retained for validation and attribution,
+// but participant-visible labels use only the randomized task position.
+const TASK_CODES = new Set(["dense_v2", "lowyield_v1"]);
 
 export default function PilotTaskController() {
   const [task, setTask] = useState(null);
@@ -97,7 +96,7 @@ export default function PilotTaskController() {
       const active = data.tasks[0];
       if (active.position === 2 && ["completed", "skipped"].includes(data.pending_outcome)
           && openReceiptPage(data.completion_receipt)) return;
-      if (!TASK_NAMES[active.task_code] || ![1, 2].includes(active.position)
+      if (!TASK_CODES.has(active.task_code) || ![1, 2].includes(active.position)
           || typeof active.desc !== "string") {
         throw new Error("Invalid active task");
       }
@@ -213,7 +212,7 @@ export default function PilotTaskController() {
             </div>
             <p className="pilotClipboardStatus" role="status" aria-live="polite">{copyStatus}</p>
             <hr />
-            <p><strong>Current task:</strong> {TASK_NAMES[task.task_code]}</p>
+            <p><strong>Current assignment:</strong> Task {task.position} of 2</p>
             <p><strong>Working directory:</strong></p>
             <p><code>/home/user/fuzz-study/work</code></p>
             <p>You may use the CLI and internal browser throughout this task.</p>
