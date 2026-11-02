@@ -41,21 +41,80 @@ def _windows():
     return windows
 
 
+def _focused_window_chain():
+    """Fallback focus IDs from libX11, even if xprop is not installed."""
+    import ctypes
+    import ctypes.util
+    found = ctypes.util.find_library("X11")
+    if not found:
+        return []
+    try:
+        lib = ctypes.CDLL(found)
+        lib.XOpenDisplay.argtypes = [ctypes.c_char_p]
+        lib.XOpenDisplay.restype = ctypes.c_void_p
+        lib.XCloseDisplay.argtypes = [ctypes.c_void_p]
+        lib.XGetInputFocus.argtypes = [
+            ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong),
+            ctypes.POINTER(ctypes.c_int)
+        ]
+        lib.XQueryTree.argtypes = [
+            ctypes.c_void_p, ctypes.c_ulong,
+            ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_ulong),
+            ctypes.POINTER(ctypes.POINTER(ctypes.c_ulong)),
+            ctypes.POINTER(ctypes.c_uint),
+        ]
+        lib.XQueryTree.restype = ctypes.c_int
+        lib.XFree.argtypes = [ctypes.c_void_p]
+        display = lib.XOpenDisplay(b":1")
+        if not display:
+            return []
+        try:
+            window = ctypes.c_ulong()
+            revert = ctypes.c_int()
+            lib.XGetInputFocus(display, ctypes.byref(window), ctypes.byref(revert))
+            seen = []
+            current = int(window.value)
+            for _ in range(20):
+                if current in (0, 1) or current in seen:
+                    break
+                seen.append(current)
+                root = ctypes.c_ulong()
+                parent = ctypes.c_ulong()
+                children = ctypes.POINTER(ctypes.c_ulong)()
+                count = ctypes.c_uint()
+                ok = lib.XQueryTree(
+                    display, current, ctypes.byref(root), ctypes.byref(parent),
+                    ctypes.byref(children), ctypes.byref(count)
+                )
+                if children:
+                    lib.XFree(ctypes.cast(children, ctypes.c_void_p))
+                if not ok or not parent.value:
+                    break
+                current = int(parent.value)
+            return seen
+        finally:
+            lib.XCloseDisplay(display)
+    except (OSError, ValueError, TypeError):
+        return []
+
+
 def focus():
-    """Read actual X11 active-window ID; unknown is returned fail-closed."""
+    """Return focused X11 application or 'unknown'; never guess by UI tab."""
+    windows = _windows()
+    by_id = {int(xid, 16): kind for kind, xid in windows.items()}
     try:
         active = _command("xprop", "-root", "_NET_ACTIVE_WINDOW")
         match = re.search(r"window id # (0x[0-9a-fA-F]+)", active)
-        if not match:
-            return "unknown"
-        active_id = int(match.group(1), 16)
-        for kind, xid in _windows().items():
-            if int(xid, 16) == active_id:
-                return kind
+        if match:
+            result = by_id.get(int(match.group(1), 16))
+            if result:
+                return result
     except (ValueError, WorkspaceLayoutError):
         pass
+    for xid in _focused_window_chain():
+        if xid in by_id:
+            return by_id[xid]
     return "unknown"
-
 
 def screen_size():
     desktop = _command("wmctrl", "-d")
