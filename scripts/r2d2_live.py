@@ -143,6 +143,22 @@ def http_get(path):
     return call("docker", "exec", LIVE, "python3", "-c", code, output=True)
 
 
+def verify_split():
+    # Test the actual participant desktop, not just the API route. A fullscreen
+    # window manager may silently ignore geometry requests.
+    probe = (
+        "import urllib.request,json;"
+        "body=json.dumps({'mode':'split','cli_percent':50}).encode();"
+        "req=urllib.request.Request('http://127.0.0.1:60000/api/workspace/layout',"
+        "data=body,headers={'Content-Type':'application/json'},method='POST');"
+        "res=urllib.request.urlopen(req,timeout=15);"
+        "data=json.load(res);"
+        "assert data.get('mode')=='split' and data.get('focus')=='cli',data;"
+        "print('SPLIT_OK',data.get('windows'))"
+    )
+    return call("docker", "exec", LIVE, "python3", "-c", probe, output=True)
+
+
 def served_bundle():
     code = (
         "import urllib.request,re;"
@@ -186,6 +202,7 @@ def apply():
         actual = served_bundle()
         if actual != expected:
             raise RuntimeError(f"noVNC served {actual}, expected {expected}")
+        print(verify_split())
         print("PASS: R2D.2 split UI and focus-aware API activated")
         print("PASS: noVNC serves", actual)
         print("Focus endpoint:", focus_response.replace("\n", " "))
