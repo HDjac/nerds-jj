@@ -32,13 +32,13 @@ def wm_name():
         "wmctrl -m 2>/dev/null | head -n 1", output=True)
 
 
-def restart_vnc():
+def restart_vnc(expected):
     shell("sv restart /home/user/services/vnc")
     last = ""
-    for _ in range(20):
+    for _ in range(25):
         time.sleep(1)
         last = wm_name()
-        if last.startswith("Name: openbox") or last.startswith("Name: matchbox"):
+        if f"name: {expected}" in last.lower():
             return last
     return last
 
@@ -76,13 +76,13 @@ def activate():
     cmd("docker", "cp", str(local), f"{LIVE}:{STAGED}")
     shell(f"cp -p {SCRIPT} {BACKUP}; mv {STAGED} {SCRIPT}; chmod 0755 {SCRIPT}")
     try:
-        actual = restart_vnc()
-        if not actual.startswith("Name: openbox"):
+        actual = restart_vnc("openbox")
+        if "name: openbox" not in actual.lower():
             raise RuntimeError(f"Openbox did not start; window manager: {actual!r}")
     except Exception:
         print("Openbox startup unverified, restoring previous Matchbox VNC script.", flush=True)
         shell(f"cp -p {BACKUP} {SCRIPT}; chmod 0755 {SCRIPT}")
-        restart_vnc()
+        restart_vnc("matchbox")
         raise
 
     print("PASS: VNC desktop running under Openbox", flush=True)
@@ -95,12 +95,12 @@ def activate():
 def rollback():
     shell(f"test -f {BACKUP}")
     current = wm_name()
-    if current.startswith("Name: matchbox"):
+    if "name: matchbox" in current.lower():
         print("ALREADY RESTORED: Matchbox is active.")
         return
     shell(f"cp -p {BACKUP} {SCRIPT}; chmod 0755 {SCRIPT}")
-    actual = restart_vnc()
-    if not actual.startswith("Name: matchbox"):
+    actual = restart_vnc("matchbox")
+    if "name: matchbox" not in actual.lower():
         raise RuntimeError(f"Could not confirm Matchbox restart: {actual}")
     print("PASS: Matchbox window manager restored; participant task/data unchanged.")
     print("If split mode is still active, use: python3 scripts/r2d2_live.py rollback")
