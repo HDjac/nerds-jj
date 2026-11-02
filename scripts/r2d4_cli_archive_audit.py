@@ -205,6 +205,7 @@ def main():
     if (grand["archive_errors"] or grand["mismatched"] or
             grand["not_in_archive"] or grand["missing_out"] or grand["missing_timing"]):
         print("REVIEW REQUIRED: archived/ingested command evidence is incomplete or inconsistent.")
+        return 1
     elif grand["not_in_db"] or grand["incomplete_lines"]:
         print("PENDING: some archived entries may still be awaiting collector ingestion.")
     else:
