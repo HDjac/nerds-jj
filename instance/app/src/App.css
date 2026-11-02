@@ -33,3 +33,73 @@
   flex: 1;
   overflow: hidden;
 }
+
+/* R2D.2: controls and draggable divider over the one shared VNC desktop. */
+.workspaceModeControls {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.45rem;
+}
+.workspaceModeControls button {
+  background: #eee;
+  color: #172b3a;
+  border: 1px solid #5c6269;
+  border-radius: 4px;
+  padding: 0.35rem 0.65rem;
+  cursor: pointer;
+  font-size: 0.86rem;
+}
+.workspaceModeControls button[aria-pressed="true"] {
+  background: #184d7a;
+  border-color: #184d7a;
+  color: white;
+  font-weight: 700;
+}
+.workspaceModeControls button:focus-visible,
+.workspaceDivider:focus-visible {
+  outline: 3px solid #ffcf66;
+  outline-offset: 1px;
+}
+.focusedAppIndicator {
+  font-size: 0.8rem;
+  color: #121d27;
+  padding-right: 0.6rem;
+}
+.workspaceLayoutError {
+  margin: 0;
+  padding: 0.4rem 0.7rem;
+  background: #fce8d9;
+  color: #6d240c;
+  font-size: 0.85rem;
+}
+.workspaceSurface {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+.workspaceDivider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  z-index: 9;
+  transform: translateX(-50%);
+  background: linear-gradient(to right, transparent 0 5px, #eeb54d 5px 9px, transparent 9px 14px);
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.workspaceDividerGrip {
+  background: #eeb54d;
+  color: #272727;
+  border: 1px solid #976512;
+  border-radius: 6px;
+  padding: 12px 3px;
+  line-height: 1;
+  font-weight: 700;
+}
