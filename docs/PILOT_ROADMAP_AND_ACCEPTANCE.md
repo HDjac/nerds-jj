@@ -143,6 +143,8 @@ Implementation strategy (to be built and tested):
 
 **Remaining xterm limitation:** The running xterm launched before the new `-sl 10000 -sb` startup options were installed, and width changes can rewrap or drop its *visible screen* content according to xterm's resize behavior; the upgraded options only apply to a future xterm process. A non-disruptive workaround is to enable the existing terminal's scrollbar via the xterm VT options menu and review previous lines if they remain in its scrollback; the independent `script` output/timing archive remains authoritative for recorded terminal output. Do not claim the source changes have solved history loss. Before deploying the next fresh Pilot 1 instance, evaluate a terminal emulator with tested reflow/scrollback support **while preserving command logger, clipboard provenance and source snapshots**; replacing the terminal mid-session would risk interactive continuity.
 
+**Live title-bar validation (2026-11-02):** The user confirmed the CLI and Firefox title bars returned after the targeted Openbox Decorate restoration. Mark title-bar restoration **locally accepted**. The separate xterm visible-history/reflow issue when dragging the splitter remains **open**; no claim that it was resolved by restoring decorations. Next 2D.4 evidence needed is `FUZZER_INVOCATION_COUNTS` to distinguish no recorded fuzz runs from absent campaign imports.
+
 **Gate:** Reconstruct a two-task session from exported records, verify no cross-task contamination and preserve raw and derived evidence.
 
 ## Release 3 — Supported LLM responses
