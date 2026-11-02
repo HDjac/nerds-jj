@@ -33,9 +33,9 @@ Legend: **DONE** = implemented and locally demonstrated in its specified scope;
 | ADV-05 | Explain all three harnesses, corpus, and target program purpose without revealing vulnerabilities | IMPLEMENTED; awaiting UI/advisor review | 2D.1 | Neutral, task-specific descriptions and three-harness guide implemented; review in live UI |
 | ADV-06 | Anonymous Task 1 / Task 2 in participant interface | IMPLEMENTED; awaiting UI check | 2D.1 | API/React labels changed; internal task codes retained; verify both orders |
 | ADV-07 | Browser search terms and visited URL observations | PARTIAL | 2D.3 / 2D.4 | Normal searches, navigation, task transitions, recovery and DB attribution verified |
-| ADV-08 | Avoid Google Search AI summaries/AI Mode as a default or uncollected chat surface | OPEN | 2D.3 | Web-only results by default; AI Mode entry routes blocked or safely handled and tested |
+| ADV-08 | Avoid Google Search AI summaries/AI Mode as a default or uncollected chat surface | SOURCE IMPLEMENTED; browser activation/testing pending | 2D.3 | Managed Web-only search engine, Google navigation guard and link hiding; live Firefox restart/verification needed |
 | ADV-09 | Capture AI responses in addition to supported prompts | DEFERRED | Release 3 | Captured responses correctly associated with prompts/tasks; failures detectable |
-| UX-01 | Show CLI and Firefox simultaneously in resizable right workspace; sidebar left | OPEN | 2D.2 | Draggable split, focus, sizing, persistent tasks, maximize options and accessibility tested |
+| UX-01 | Show CLI and Firefox simultaneously in resizable right workspace; sidebar left | LOCAL ACCEPTED; task-transition audit pending | 2D.2 / 2D.4 | User confirmed stable dual-window split, bounded resize at 1920x1080, CLI/Firefox focus and both clipboard directions; task-transition regression remains |
 | DATA-01 | Joint audit of commands, fuzzing campaigns, source versions, AI/browser and clipboard activity | OPEN | 2D.4 | Reconstruct both tasks with unambiguous IDs, timestamps, outputs, artifacts, and outcome |
 
 ## 2D.1 — Participant experience
@@ -81,6 +81,10 @@ Legend: **DONE** = implemented and locally demonstrated in its specified scope;
 
 **Gate:** Continuous CLI + Firefox usability, reproducible task transitions, correct source/destination metadata, host clipboard isolation.
 
+### Release 2D.2 local acceptance (2026-11-02)
+
+The user confirmed that, in the existing local NERDs participant, Split View shows the intended CLI and Firefox, extreme divider movements clamp to usable widths, both application's focus labels behave correctly, and copying CLI→Firefox and Firefox→CLI works. Firefox scaling stays automatic; the accepted VNC desktop is 1920×1080. This closes the **local interactive split-workspace checkpoint**, but full task-transition, database attribution, and advisor acceptance remain part of later integration/closeout.
+
 ## 2D.3 — Conventional Google Search and browser reliability
 
 ### New approved study-browser policy
@@ -95,6 +99,12 @@ Implementation strategy (to be built and tested):
 3. Preserve access to traditional search, web documentation, and separately supported chat services (e.g. `gemini.google.com`, ChatGPT, Claude) under their own existing prompt/response capture policies.
 4. Do not claim absolute elimination of all Google AI exposure: Google can change routes/markup and unrecognized surfaces may remain. Record technical coverage and limitations; repeat tests before Pilot 2.
 5. Keep privacy, participant disclosure and source-specific AI capture policies accurate. Google search queries/navigation continue to be logged under existing constraints.
+
+**2D.3 implementation checkpoint (source committed; live validation pending):**
+- Firefox policy `instance/firefox-policies/policies.json` adds a managed `NERDs Google Web` search engine using `https://www.google.com/search?udm=14&q={searchTerms}`.
+- Extension v0.9.0 adds top-level Google navigation redirects (including known `/ai`, `/aimode`, `udm=50` cases) and cosmetic hiding of known AI Mode links. It does not alter `browser-events.js` or AI prompt logging, and it leaves `gemini.google.com` unaffected.
+- The Docker image packages the XPI from its source rather than the previously committed stale binary. The in-place local installer is `scripts/r2d3_google_web_live.py`, which backs up and stages XPI/policy **without restarting Firefox or resetting any study work**. A graceful Firefox restart is required to activate the changes.
+- Restriction is explicitly best-effort for known Google Search routes, not a guarantee about future Google markup, country domains, or all possible AI endpoints. Re-test before Pilot 2 and document all observed bypasses.
 
 **Gate:** At minimum: address-bar search, Google home/search-box search, Google results navigation, direct AI Mode route, AI Mode controls, history/reload, and extension-disabled failure/recovery paths tested. No ordinary search unexpectedly drops the user's query or silently bypasses the collector.
 
