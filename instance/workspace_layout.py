@@ -131,6 +131,60 @@ def _focused_window_chain():
         return []
 
 
+def _focused_app_class():
+    """Classify the X11 input-focus window (or an ancestor) using WM_CLASS."""
+    import ctypes
+    import ctypes.util
+
+    class XClassHint(ctypes.Structure):
+        _fields_ = [
+            ("res_name", ctypes.c_void_p),
+            ("res_class", ctypes.c_void_p),
+        ]
+
+    library = ctypes.util.find_library("X11")
+    if not library:
+        return "unknown"
+    try:
+        x11 = ctypes.CDLL(library)
+        x11.XOpenDisplay.argtypes = [ctypes.c_char_p]
+        x11.XOpenDisplay.restype = ctypes.c_void_p
+        x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
+        x11.XGetClassHint.argtypes = [
+            ctypes.c_void_p, ctypes.c_ulong, ctypes.POINTER(XClassHint)
+        ]
+        x11.XGetClassHint.restype = ctypes.c_int
+        x11.XFree.argtypes = [ctypes.c_void_p]
+        display = x11.XOpenDisplay(b":1")
+        if not display:
+            return "unknown"
+        try:
+            for xid in _focused_window_chain():
+                hint = XClassHint()
+                if x11.XGetClassHint(display, xid, ctypes.byref(hint)):
+                    try:
+                        cls = (ctypes.string_at(hint.res_class).decode(
+                            "utf-8", errors="replace").lower()
+                            if hint.res_class else "")
+                        name = (ctypes.string_at(hint.res_name).decode(
+                            "utf-8", errors="replace").lower()
+                            if hint.res_name else "")
+                    finally:
+                        if hint.res_class:
+                            x11.XFree(hint.res_class)
+                        if hint.res_name:
+                            x11.XFree(hint.res_name)
+                    if cls == "xterm" or name == "xterm":
+                        return "cli"
+                    if "firefox" in cls or "firefox" in name:
+                        return "browser"
+        finally:
+            x11.XCloseDisplay(display)
+    except (OSError, ValueError, TypeError):
+        return "unknown"
+    return "unknown"
+
+
 def focus():
     """Actual focused X11 application, including other Firefox windows.
 
@@ -153,7 +207,7 @@ def focus():
         for e in entries:
             if xid == int(e["id"], 16):
                 return e["kind"]
-    return "unknown"
+    return _focused_app_class()
 
 
 def screen_size():
