@@ -13,6 +13,7 @@ from datetime import datetime
 
 import config as CONFIG
 from firefox import get_firefox_history
+from pilot1_task_descriptions import PROGRAM_OVERVIEWS, pilot1_task_description
 
 app = Flask(__name__)
 
@@ -634,33 +635,8 @@ def get_tasks():
         task_code = active_task.get("task_code")
         position = active_task.get("position")
 
-        descriptions = {
-            "dense_v2": (
-                "<h2>Dense v2 — Fuzzing Investigation</h2>"
-                "<p>Investigate the provided C program using "
-                "coverage-guided fuzzing.</p>"
-                "<p>Examine the target source, available harnesses, "
-                "and seed inputs. Select or adapt a harness, execute "
-                "fuzzing campaigns, and investigate the feedback.</p>"
-                "<p><strong>Working directory:</strong><br>"
-                "<code>/home/user/fuzz-study/work</code></p>"
-                "<p>You may modify your working files, experiment "
-                "with different approaches, and use the internal "
-                "browser as needed.</p>"
-            ),
-            "lowyield_v1": (
-                "<h2>Low-Yield v1 — Fuzzing Investigation</h2>"
-                "<p>Investigate the provided C program using "
-                "coverage-guided fuzzing.</p>"
-                "<p>Examine the available harnesses, run fuzzing "
-                "campaigns, and analyze their results.</p>"
-                "<p><strong>Working directory:</strong><br>"
-                "<code>/home/user/fuzz-study/work</code></p>"
-            ),
-        }
-
         if (
-            task_code not in descriptions
+            task_code not in PROGRAM_OVERVIEWS
             or type(position) is not int
             or position not in (1, 2)
         ):
@@ -704,8 +680,8 @@ def get_tasks():
                 "task_no": position,
                 "position": position,
                 "task_code": task_code,
-                "title": task_code,
-                "desc": descriptions[task_code],
+                "title": f"Task {position}",
+                "desc": pilot1_task_description(task_code, position),
             }],
         })
 
