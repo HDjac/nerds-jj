@@ -44,7 +44,7 @@ RUN echo "load-module module-simple-protocol-tcp listen=127.0.0.1 format=s16le c
 # Do not copy the older binary XPI: otherwise Web-only search interception
 # would silently be missing from fresh participant images.
 COPY ./firefox-extension/chatgpt-prompt-logger/ /opt/nerds-firefox-extension/
-RUN python3 -c "import pathlib,zipfile; d=pathlib.Path('/opt/nerds-firefox-extension'); n=['manifest.json','background.js','browser-events.js','content.js','google-web-only.js']; z=zipfile.ZipFile('/opt/chatgpt-prompt-logger.xpi','w',compression=zipfile.ZIP_DEFLATED); [z.write(d/x,arcname=x) for x in n]; z.close()"
+RUN python3 -c "import pathlib,zipfile; d=pathlib.Path('/opt/nerds-firefox-extension'); n=['manifest.json','background.js','browser-events.js','content.js','google-web-only.js','google-web-ux.js']; z=zipfile.ZipFile('/opt/chatgpt-prompt-logger.xpi','w',compression=zipfile.ZIP_DEFLATED); [z.write(d/x,arcname=x) for x in n]; z.close()"
 COPY ./firefox-policies/policies.json /usr/lib/firefox-esr/distribution/policies.json
 
 RUN useradd -m --shell=/usr/bin/nologin user
