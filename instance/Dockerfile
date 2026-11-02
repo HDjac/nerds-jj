@@ -54,6 +54,7 @@ RUN useradd -m --shell=/usr/bin/nologin user
 RUN install -d -o user -g user /home/user/.config/openbox \\
     && sed 's#<titleLayout>NLIMC</titleLayout>#<titleLayout>NLC</titleLayout>#' \\
        /etc/xdg/openbox/rc.xml > /home/user/.config/openbox/rc.xml \\
+    && sed -i 's#</keyboard>#  <keybind key="C-A-S-d"><action name="Decorate"/></keybind>\\n</keyboard>#' /home/user/.config/openbox/rc.xml \
     && chown user:user /home/user/.config/openbox/rc.xml
 WORKDIR /home/user
 
