@@ -32,7 +32,7 @@ Legend: **DONE** = implemented and locally demonstrated in its specified scope;
 | ADV-04 | Increase command/example readability | PARTIAL | 2D.1 | Inspect sidebar, guide and xterm at actual participant resolutions |
 | ADV-05 | Explain all three harnesses, corpus, and target program purpose without revealing vulnerabilities | IMPLEMENTED; awaiting UI/advisor review | 2D.1 | Neutral, task-specific descriptions and three-harness guide implemented; review in live UI |
 | ADV-06 | Anonymous Task 1 / Task 2 in participant interface | IMPLEMENTED; awaiting UI check | 2D.1 | API/React labels changed; internal task codes retained; verify both orders |
-| ADV-07 | Browser search terms and visited URL observations | PARTIAL | 2D.3 / 2D.4 | Normal searches, navigation, task transitions, recovery and DB attribution verified |
+| ADV-07 | Browser search terms and visited URL observations | CORE LOCAL VERIFIED; cross-task/recovery pending | 2D.3 / 2D.4 | Two Google search paths and ordinary navigation all persisted under Task 2; wider history/task transitions and queue recovery pending |
 | ADV-08 | Avoid Google Search AI summaries/AI Mode as a default or uncollected chat surface | LOCAL UI ACCEPTED; DB verification pending | 2D.3 | User confirmed updated Firefox Web-only search and AI Mode behavior after v0.9.0 policy/extension activation; audit search/navigation task attribution next |
 | ADV-09 | Capture AI responses in addition to supported prompts | DEFERRED | Release 3 | Captured responses correctly associated with prompts/tasks; failures detectable |
 | UX-01 | Show CLI and Firefox simultaneously in resizable right workspace; sidebar left | LOCAL ACCEPTED; task-transition audit pending | 2D.2 / 2D.4 | User confirmed stable dual-window split, bounded resize at 1920x1080, CLI/Firefox focus and both clipboard directions; task-transition regression remains |
@@ -118,6 +118,8 @@ Implementation strategy (to be built and tested):
 - Retest the three approved clipboard-text directions and exclusions after focus-aware split-view changes.
 - Maintain wording: clipboard text associated with a **paste request**, not proof the destination inserted it.
 
+**2D.3 browser data checkpoint complete (2026-11-02):** The follow-up database query found the previously missed `www.example.com` ordinary navigation at event `6164` under Task 2 (`dense_v2`), plus Google address-bar search events `6154–6156` and Google search-form events `6161–6163`. All seven identified events have Task 2 attribution; `wrong_task_events=0`. Over the diagnostic window there were 19 navigation events and 33 raw search notifications, **not** 33 confirmed distinct participant searches. The `TEST_COUNTS` result of zero for `example_navigation_events` was a defect in the diagnostic SQL filter (`example.com` vs `www.example.com`), now fixed. This verifies the core local browser ingestion path and establishes the starting baseline for integrated auditing. Wider route/recovery checks and advisor acceptance remain open.
+
 ## 2D.4 — Integrated data audit
 
 - Cross-check participant/session/task-run IDs and actual timestamps through both task orders.
@@ -126,6 +128,8 @@ Implementation strategy (to be built and tested):
 - Browser navigation/query observations, supported AI prompts, clipboard events and scoped text with exclusion audits.
 - Reconcile collector restart, transient failure, late/duplicate events and task transition boundaries.
 - Document known blind spots and classification confidence; do not conflate inferred data with observed behavior.
+
+**Audit kickoff (2026-11-02):** `scripts/r2d4_data_audit.py` performs a READ ONLY transaction scoped to the existing active participant and reports per-task counts for event source/type, campaigns/harnesses, artifact pointers/checksums, browser searches/navigation, AI interactions, restricted clipboard-text policy, source snapshots, and task/session consistency. It does not print command transcripts, search queries, prompt text, clipboard text, or source code. Data findings are pending live execution. Follow with artifact integrity verification and task-transition tests only after understanding this baseline.
 
 **Gate:** Reconstruct a two-task session from exported records, verify no cross-task contamination and preserve raw and derived evidence.
 
