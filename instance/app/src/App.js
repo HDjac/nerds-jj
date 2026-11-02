@@ -19,17 +19,25 @@ function App() {
   const [workspaceMode, setWorkspaceMode] = useSavedState("r2d-workspace-mode", "split");
   const [cliWidth, setCliWidth] = useSavedState("r2d-cli-width", 50);
   const [dragWidth, setDragWidth] = useState(null);
+  const [actualSplitWidth, setActualSplitWidth] = useState(null);
   const [focusedApp, setFocusedApp] = useState("unknown");
   const [layoutError, setLayoutError] = useState("");
   const surfaceRef = useRef(null);
   const draggingRef = useRef(false);
-  const activeWidth = dragWidth ?? cliWidth;
+  const activeWidth = dragWidth ?? actualSplitWidth ?? cliWidth;
   const mode = ["split", "cli", "browser"].includes(workspaceMode) ? workspaceMode : "split";
   const safeWidth = Number.isInteger(cliWidth) && cliWidth >= 30 && cliWidth <= 70 ? cliWidth : 50;
 
   function applyLayout(nextMode, nextWidth = safeWidth) {
     setLayoutError("");
     setWorkspaceLayout(nextMode, nextWidth).then(result => {
+      // XTerm rounds native sizes to character columns. Position the one
+      // HTML divider at the *actual* X11 edge, not the requested percentage.
+      if (nextMode === "split" &&
+          Number.isFinite(result.divider_percent) &&
+          result.divider_percent >= 20 && result.divider_percent <= 80) {
+        setActualSplitWidth(result.divider_percent);
+      }
       if (result.focus === "cli" || result.focus === "browser") setFocusedApp(result.focus);
     }).catch(error => setLayoutError(error.message));
   }
@@ -69,6 +77,7 @@ function App() {
       ? Math.max(30, Math.min(70, Math.round((event.clientX - bounds.left) / bounds.width * 100)))
       : safeWidth;
     setDragWidth(null);
+    setActualSplitWidth(null);
     setCliWidth(next);
     applyLayout("split", next);
   }
@@ -313,6 +322,12 @@ function App() {
                     {choice === "split" ? "Split view" : choice === "cli" ? "CLI only" : "Firefox only"}
                   </button>
                 ))}
+                {mode === "split" && (
+                  <button type="button" onClick={() => applyLayout("split", safeWidth)}
+                    title="Bring back either window if it was minimized">
+                    Restore windows
+                  </button>
+                )}
               </div>
             ) : <TabNav tab={tab} setTab={setTab}/>}
             <div className="statusBar">
