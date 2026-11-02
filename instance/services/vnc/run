@@ -1,4 +1,4 @@
 #!/bin/sh
 # R2D.2: Openbox honors wmctrl positioning required by the split workspace.
 # The VNC server stays local to the instance and retains the original display :1.
-exec vncserver -geometry 1280x720 -SecurityTypes None -fg -localhost :1 -- openbox --sm-disable
+exec vncserver -geometry 1920x1080 -SecurityTypes None -fg -localhost :1 -- openbox --sm-disable
