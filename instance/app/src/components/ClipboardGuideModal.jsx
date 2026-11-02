@@ -76,8 +76,9 @@ export default function ClipboardGuideModal({ open, onClose }) {
             <h3>Use the CLI terminal</h3>
             <p>To copy terminal output, select the text with your mouse.
               To paste inside the terminal, first click the CLI area and use
-              <span className="pilotKeyboardShortcut"> Shift + Insert</span> or
-              middle-click if your mouse supports it.</p>
+              <span className="pilotKeyboardShortcut"> Shift + Insert</span>.
+              Middle-click may also paste, but it is not reliably recorded as
+              a clipboard paste request for this study.</p>
             <p><strong>Important:</strong> <span className="pilotKeyboardShortcut">Ctrl + C</span>
               stops a running terminal command. It is not the terminal Copy shortcut.</p>
           </section>
@@ -103,11 +104,21 @@ export default function ClipboardGuideModal({ open, onClose }) {
           </section>
 
           <section className="pilotBoundaryNote">
-            <h3>Privacy boundary</h3>
-            <p>Copy/paste is intended to stay inside NERDs. Copying between
-              your personal computer and the NERDs workspace is intentionally
-              restricted. Do not enter personal passwords, private credentials,
-              or other sensitive information into the study environment.</p>
+            <h3>Clipboard privacy and study recording</h3>
+            <p>For research purposes, NERDs may record the text associated with
+              paste requests <strong>within the CLI</strong>, from
+              <strong> internal Firefox to the CLI</strong>, and from the
+              <strong> CLI to internal Firefox</strong>. The active task and
+              time of the paste request may also be recorded. A recorded paste
+              request does not necessarily mean the destination inserted the text.</p>
+            <p>Text copied from the task description or Fuzzing Guide into the
+              CLI is not collected as clipboard text. Commands executed in
+              the terminal may be recorded separately as part of the study.</p>
+            <p><strong>Do not copy or paste passwords, API keys, access tokens,
+              personal information, or other sensitive data</strong> in NERDs.
+              Copying between your personal computer and the NERDs workspace
+              remains restricted. Refer to the study consent information for
+              how research data may be collected and used.</p>
           </section>
         </div>
         <footer className="nerdsGuideFooter">
