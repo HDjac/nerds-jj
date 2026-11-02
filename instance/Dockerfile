@@ -40,8 +40,20 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -yqq \
     runit && rm -rf /var/lib/apt/lists/*
 RUN echo "load-module module-simple-protocol-tcp listen=127.0.0.1 format=s16le channels=2 rate=48000 record=true playback=false" > /etc/pulse/default.pa.d/simple-protocol.pa
 
-# Install NERDS Firefox extension for ChatGPT prompt logging - updated to .xpi to avoid firefox not installing extension. still need to sign
-COPY ./firefox-extension/chatgpt-prompt-logger.xpi /opt/chatgpt-prompt-logger.xpi
+# Repackage the installed Firefox extension from the maintained source.
+# Do not copy the older binary XPI: otherwise Web-only search interception
+# would silently be missing from fresh participant images.
+COPY ./firefox-extension/chatgpt-prompt-logger/ /opt/nerds-firefox-extension/
+RUN python3 - <<'PY'
+import pathlib, zipfile
+folder = pathlib.Path('/opt/nerds-firefox-extension')
+names = ['manifest.json', 'background.js', 'browser-events.js',
+         'content.js', 'google-web-only.js']
+with zipfile.ZipFile('/opt/chatgpt-prompt-logger.xpi', 'w',
+                     compression=zipfile.ZIP_DEFLATED) as out:
+    for name in names:
+        out.write(folder / name, arcname=name)
+PY
 COPY ./firefox-policies/policies.json /usr/lib/firefox-esr/distribution/policies.json
 
 RUN useradd -m --shell=/usr/bin/nologin user
