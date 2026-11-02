@@ -10,20 +10,31 @@ import subprocess
 from pathlib import Path
 
 LIVE = "nerds-pilot1-browser-r1-test"
-BASE = "/home/user/.r2d4-ui"
+# Distinct prefix avoids overwriting snapshots left by the failed first attempt.
+BASE = "/home/user/.r2d4-ui-retry"
 LAYOUT = "/home/user/workspace_layout.py"
 XTERM = "/home/user/services/xterm/run"
 OPENBOX = "/home/user/.config/openbox/rc.xml"
 
 
 def command(*args, output=False):
-    result = subprocess.run(args, check=True, text=True,
-                            stdout=subprocess.PIPE if output else None)
+    result = subprocess.run(args, check=False, text=True,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode:
+        # Preserve the original stderr so failed chmod, mv, chown, or sv
+        # restart operations can be diagnosed without another deployment.
+        raise RuntimeError(
+            "Command failed (" + str(result.returncode) + "): " +
+            " ".join(args[:6]) + "\\n" +
+            (result.stderr.strip() or result.stdout.strip() or "(no diagnostic output)")
+        )
     return result.stdout.strip() if output else None
 
 
-def sh(script, output=False):
-    return command("docker", "exec", LIVE, "sh", "-ec", script, output=output)
+def sh(script, output=False, root=False):
+    args = ("docker", "exec", "-u", "root", LIVE, "sh", "-ec", script) if root else (
+        "docker", "exec", LIVE, "sh", "-ec", script)
+    return command(*args, output=output)
 
 
 def as_user(*args):
@@ -77,29 +88,38 @@ def apply():
     sh(f"test ! -e {BASE}-old-layout.py && test ! -e {BASE}-old-xterm-run "
        f"&& test ! -e {BASE}-old-openbox.xml "
        f"&& test ! -e {BASE}-next-layout.py && test ! -e {BASE}-next-xterm-run")
+    print("Staging updated layout and xterm startup (current terminal stays running).", flush=True)
     command("docker", "cp", str(layout), f"{LIVE}:{BASE}-next-layout.py")
     command("docker", "cp", str(xterm), f"{LIVE}:{BASE}-next-xterm-run")
+    # Docker cp creates root-owned files by default. Set explicit ownership
+    # before mv/chmod; do not rely on the participant's default exec UID.
+    sh(f"chown user:user {BASE}-next-layout.py {BASE}-next-xterm-run; "
+       f"chmod 0644 {BASE}-next-layout.py; "
+       f"chmod 0755 {BASE}-next-xterm-run", root=True)
     sh(f"python3 -m py_compile {BASE}-next-layout.py")
     try:
-        # Back up exact live files before changing any startup configuration.
+        print("Backing up existing files without overwriting earlier attempts.", flush=True)
         sh(f"cp -p {LAYOUT} {BASE}-old-layout.py; "
            f"cp -p {XTERM} {BASE}-old-xterm-run; "
-           f"cp -p {OPENBOX} {BASE}-old-openbox.xml")
+           f"cp -p {OPENBOX} {BASE}-old-openbox.xml", root=True)
+        print("Installing files and restarting API only.", flush=True)
         sh(f"mv {BASE}-next-layout.py {LAYOUT}; "
            f"mv {BASE}-next-xterm-run {XTERM}; "
-           f"chmod 0755 {XTERM}; "
-           "sv restart /home/user/services/api")
+           f"chown user:user {LAYOUT} {XTERM}; "
+           f"chmod 0644 {LAYOUT}; chmod 0755 {XTERM}", root=True)
+        sh("sv restart /home/user/services/api")
+        print("Restoring Openbox titlebar decorations.", flush=True)
         as_user("python3", "-c", PATCH_OPENBOX)
         as_user("openbox", "--reconfigure")
     except Exception:
-        print("Update unverified: restoring original files.", flush=True)
+        print("Update unverified: restoring the exact pre-retry files.", flush=True)
         sh(f"if [ -f {BASE}-old-layout.py ]; then "
            f"cp -p {BASE}-old-layout.py {LAYOUT}; fi; "
            f"if [ -f {BASE}-old-xterm-run ]; then "
-           f"cp -p {BASE}-old-xterm-run {XTERM}; chmod 755 {XTERM}; fi; "
+           f"cp -p {BASE}-old-xterm-run {XTERM}; fi; "
            f"if [ -f {BASE}-old-openbox.xml ]; then "
-           f"cp -p {BASE}-old-openbox.xml {OPENBOX}; fi; "
-           "sv restart /home/user/services/api")
+           f"cp -p {BASE}-old-openbox.xml {OPENBOX}; fi", root=True)
+        sh("sv restart /home/user/services/api")
         as_user("openbox", "--reconfigure")
         raise
 
@@ -120,9 +140,9 @@ def rollback():
         print("No active R2D.4 UI backup; nothing changed.")
         return
     sh(f"cp -p {BASE}-old-layout.py {LAYOUT}; "
-       f"cp -p {BASE}-old-xterm-run {XTERM}; chmod 755 {XTERM}; "
-       f"cp -p {BASE}-old-openbox.xml {OPENBOX}; "
-       "sv restart /home/user/services/api")
+       f"cp -p {BASE}-old-xterm-run {XTERM}; "
+       f"cp -p {BASE}-old-openbox.xml {OPENBOX}", root=True)
+    sh("sv restart /home/user/services/api")
     as_user("openbox", "--reconfigure")
     print("PASS: Previous R2D.2 layout and Openbox configuration restored.")
 
