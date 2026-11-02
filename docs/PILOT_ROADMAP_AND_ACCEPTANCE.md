@@ -151,6 +151,8 @@ Implementation strategy (to be built and tested):
 
 **Next source archive integrity gate:** `scripts/r2d4_verify_source_archives.py` is a read-only audit against the actual `~/nerds-pilot-backups/sources/<session>/<task>/...` storage keys. For each PostgreSQL source snapshot or diff, it checks archive path safety, file existence, expected byte length, SHA256, snapshot ZIP CRC/safe member names, and association with a matching source event. It reports only status and counts, never file contents. Live verification pending.
 
+**Source archive verification accepted (2026-11-02):** The user ran `python3 scripts/r2d4_verify_source_archives.py` on WSL against `/home/hoekj/nerds-pilot-backups` and obtained **9/9 PASS**: Task 1 has 3 source diffs and 3 source snapshots, Task 2 has 1 diff and 2 snapshots. All stored files matched PostgreSQL recorded byte counts and SHA-256 hashes, snapshot ZIPs passed checks, and each artifact had matching source-event reference(s). One Task 1 snapshot had 2 source-event references (consistent with content-addressed reuse). This verifies *stored evidence integrity*, not that every intermediate edit was observed. **Remaining 2D.4 checkpoints:** investigate Task 1/2 missing `started_at` fields without inventing timestamps; reconcile structured CLI records with terminal transcripts; test incomplete/crashing fuzzing campaigns and collector restarts; confirm task-boundary isolation in another fresh participant flow. Existing UI title bars restored; xterm resize scrollback issue still open.
+
 **Gate:** Reconstruct a two-task session from exported records, verify no cross-task contamination and preserve raw and derived evidence.
 
 ## Release 3 — Supported LLM responses
