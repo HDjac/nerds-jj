@@ -86,7 +86,7 @@ SELECT 'TEST_COUNTS' AS check_type,
        ) AS form_search_events,
        COUNT(*) FILTER (
           WHERE e.event_type='browser_navigation'
-          AND e.payload->>'page_host'='example.com'
+          AND e.payload->>'page_host' IN ('example.com','www.example.com')
        ) AS example_navigation_events,
        COUNT(*) FILTER (
           WHERE e.task_run_id <> t.task_run_id
@@ -102,7 +102,7 @@ LEFT JOIN fuzz_pilot.events e
     (e.event_type='browser_search'
        AND e.payload->>'search_query' IN ('nerds-r2d3-address','nerds-r2d3-form'))
     OR (e.event_type='browser_navigation'
-       AND e.payload->>'page_host'='example.com')
+       AND e.payload->>'page_host' IN ('example.com','www.example.com'))
   )
 WHERE s.instance_id='{iid}' AND s.status='active'
 GROUP BY s.session_id;
