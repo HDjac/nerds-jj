@@ -109,6 +109,7 @@ RUN emcc -I testing tasks/read.c testing/test_username.c -o /tmp/warmup.js \
 #WORKDIR /home/user/app
 COPY --chown=user:user ./firefox.py .
 COPY --chown=user:user ./instance-api.py .
+COPY --chown=user:user ./pilot1_task_descriptions.py .
 COPY --chown=user:user ./browser_observation.py .
 COPY --chown=user:user ./clipboard_observation.py .
 COPY --chown=user:user ./browser_extension_origin.py .
