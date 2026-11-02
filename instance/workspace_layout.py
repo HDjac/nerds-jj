@@ -183,7 +183,21 @@ def set_layout(mode, cli_percent=50):
     else:
         _command("wmctrl", "-ia", windows["cli"])
 
+    geometry = current_geometry()
+    if mode == "split":
+        # Matchbox and other fullscreen window managers may accept wmctrl
+        # commands yet silently remaximize a window. Never report success
+        # without two genuinely separated native windows.
+        for kind, expected in bounds.items():
+            observed = geometry.get(kind)
+            if observed is None:
+                raise WorkspaceLayoutError("Window geometry unavailable")
+            x, y, w, h = observed
+            target_x, _, target_w, _ = expected
+            if abs(x - target_x) > 55 or abs(w - target_w) > 65:
+                raise WorkspaceLayoutError("Window manager does not support split tiling")
+
     return {"mode": mode, "cli_percent": cli_percent,
             "width": width, "height": height,
-            "windows": current_geometry(),
+            "windows": geometry,
             "focus": focus()}
