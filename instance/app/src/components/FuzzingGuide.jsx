@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { setNerdsInternalClipboard } from "../internalClipboard";
 import guide from "../data/fuzzingGuideData.json";
 import "./FuzzingGuide.css";
 
@@ -11,23 +12,78 @@ const QUICK_STEPS = [
   ["Continue", "./fuzz_a ../runs/corpus-a -max_total_time=120"],
 ];
 
-export function FuzzingQuickStart({ onOpen }) {
+/** Only a running CLI command is copyable. Ctrl+C is a keystroke, not text to paste. */
+function isStopShortcut(command) {
+  return command.replace(/\s/g, "").toLowerCase() === "ctrl+c";
+}
+
+/** Shares the existing internal noVNC clipboard; never accesses the host clipboard. */
+function useGuideCommandCopy() {
+  const [copiedId, setCopiedId] = useState(null);
+  const [notice, setNotice] = useState("");
+
+  function copy(commandId, command) {
+    if (isStopShortcut(command)) return;
+    if (!setNerdsInternalClipboard(command, "fuzzing_guide_command")) {
+      setNotice("Unable to copy command. Please type it in the CLI.");
+      return;
+    }
+    setCopiedId(commandId);
+    setNotice("Command copied inside NERDs. Switch to CLI and paste with Shift + Insert.");
+  }
+
+  return { copiedId, notice, copy, reset: () => { setCopiedId(null); setNotice(""); } };
+}
+
+function GuideCommand({ command, commandId, copiedId, onCopy }) {
+  if (isStopShortcut(command)) {
+    return (
+      <div className="nerdsGuideShortcutRow">
+        <span className="nerdsGuideShortcut">Ctrl + C</span>
+        <span>Press these keys in the CLI to stop a running command. Do not paste them.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="nerdsGuideCommandRow">
+      <code>{command}</code>
+      <button type="button" className="nerdsGuideCopyCommand"
+        aria-label={`Copy command into NERDs internal clipboard: ${command}`}
+        onClick={() => onCopy(commandId, command)}>
+        {copiedId === commandId ? "Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
+export function FuzzingQuickStart({ onOpen, showGuideButton = true }) {
+  const clipboard = useGuideCommandCopy();
+
   return (
     <section className="nerdsQuickStart" aria-labelledby="nerds-quick-start-heading">
       <div className="nerdsQuickStartHeading">
         <h4 id="nerds-quick-start-heading">Fuzzing Quick Start</h4>
-        <button type="button" onClick={onOpen} className="nerdsGuideOpen">
-          View Fuzzing Guide
-        </button>
+        {showGuideButton && (
+          <button type="button" onClick={onOpen} className="nerdsGuideOpen">
+            View Fuzzing Guide
+          </button>
+        )}
       </div>
+      <p className="nerdsGuideCopyHelp">
+        Click <strong>Copy</strong> beside a command, switch to the CLI tab,
+        and paste using <strong>Shift + Insert</strong>. Copy does not run the command.
+      </p>
       <ol>
-        {QUICK_STEPS.map(([action, command]) => (
-          <li key={action}>
+        {QUICK_STEPS.map(([action, command], index) => (
+          <li key={`${action}-${index}`}>
             <strong>{action}</strong>
-            <code>{command}</code>
+            <GuideCommand command={command} commandId={`quick-${index}`}
+              copiedId={clipboard.copiedId} onCopy={clipboard.copy} />
           </li>
         ))}
       </ol>
+      <p className="nerdsGuideCopyStatus" role="status" aria-live="polite">{clipboard.notice}</p>
       <p className="nerdsGuideHelp">
         The example uses fuzz_a. Choose the harness relevant to your task.
         Keep the same corpus directory when continuing a run.
@@ -41,6 +97,7 @@ export function FuzzingGuideModal({ open, onClose }) {
   const closeRef = useRef(null);
   const previousFocus = useRef(null);
   const onCloseRef = useRef(onClose);
+  const clipboard = useGuideCommandCopy();
   onCloseRef.current = onClose;
 
   useEffect(() => {
@@ -74,6 +131,11 @@ export function FuzzingGuideModal({ open, onClose }) {
     };
   }, [open]);
 
+  // Reset the guide's success label when reopening, without clearing the clipboard itself.
+  useEffect(() => {
+    if (!open) clipboard.reset();
+  }, [open]);
+
   if (!open) return null;
   return (
     <div className="nerdsGuideBackdrop" onMouseDown={(event) => {
@@ -88,15 +150,21 @@ export function FuzzingGuideModal({ open, onClose }) {
         </header>
         <div className="nerdsGuideBody">
           <p>{guide.intro}</p>
-          {guide.sections.map((section) => (
+          <p className="nerdsGuideCopyHelp">To use a listed command, click its
+            <strong> Copy</strong> button, return to CLI, and paste using
+            <strong> Shift + Insert</strong>.</p>
+          <p className="nerdsGuideCopyStatus" role="status" aria-live="polite">{clipboard.notice}</p>
+          {guide.sections.map((section, sectionIndex) => (
             <section key={section.heading}>
               <h3>{section.heading}</h3>
               <p>{section.summary}</p>
               <ol>
-                {section.steps.map((step) => (
-                  <li key={step.action}>
+                {section.steps.map((step, stepIndex) => (
+                  <li key={`${step.action}-${stepIndex}`}>
                     <strong>{step.action}</strong>
-                    <code>{step.command}</code>
+                    <GuideCommand command={step.command}
+                      commandId={`modal-${sectionIndex}-${stepIndex}`}
+                      copiedId={clipboard.copiedId} onCopy={clipboard.copy} />
                     <p>{step.detail}</p>
                   </li>
                 ))}

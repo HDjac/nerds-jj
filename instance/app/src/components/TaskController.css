@@ -63,3 +63,51 @@
 .pilotOutcomeButtons { display: flex; flex-direction: column; gap: 0.5rem; }
 .pilotOutcomeButtons .pilotSkipButton { background: #fff3dd; border: 1px solid #8c6b33; }
 .pilotFinishControls .pilotSkipExplanation { font-size: 0.88rem; line-height: 1.4; }
+
+/* Release 2A: internal-only clipboard controls; no OS clipboard API. */
+.pilotTaskCopyControls { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0.65rem 0 0.2rem; }
+.pilotTaskCopyControls button { background: #e8f0fa; color: #183c5c; border: 1px solid #647c94; border-radius: 4px; padding: 0.45rem 0.55rem; cursor: pointer; font-size: 0.9rem; }
+.pilotTaskCopyControls button:hover { background: #d6e8fc; }
+.pilotTaskCopyControls button:focus-visible { outline: 3px solid #214c80; outline-offset: 2px; }
+.pilotClipboardStatus { min-height: 1.1rem; font-size: 0.85rem; color: #2c485f; }
+/* Release 2A guide refinement: reference buttons at top of the task pane. */
+.pilotTaskGuideActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin: 0.4rem 0 0.85rem;
+}
+.pilotTaskGuideActions button {
+  background: #215795;
+  color: #fff;
+  border: 1px solid #215795;
+  border-radius: 5px;
+  padding: 0.55rem 0.4rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.3;
+  cursor: pointer;
+}
+.pilotTaskGuideActions button:hover { background: #174271; }
+.pilotTaskGuideActions button:focus-visible { outline: 3px solid #102e50; outline-offset: 2px; }
+.pilotClipboardModalBody h3 { margin: 1.05rem 0 0.35rem; }
+.pilotClipboardModalBody p { margin: 0.3rem 0 0.75rem; }
+.pilotClipboardModalBody .pilotKeyboardShortcut {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.pilotClipboardModalBody .pilotBoundaryNote {
+  padding: 0.75rem;
+  border-left: 4px solid #456985;
+  background: #f1f5fa;
+}
+
+/* Release 2A readability follow-up: code in the participant task sidebar. */
+#taskWindow .pilotTaskDescription code,
+#taskWindow .pilotTaskDescription pre,
+#taskWindow #task > p > code {
+  font-size: 1.05rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}

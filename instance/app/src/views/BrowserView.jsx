@@ -3,6 +3,8 @@ import RFB from "@novnc/novnc";
 import "./BrowserView.css";
 import AudioPlugin from "../lib/novnc-audio";
 import { DEV_MODE } from "../util";
+import { getNerdsInternalClipboard, getNerdsInternalClipboardSource, getNerdsObservedClipboardText, setNerdsInternalClipboard } from "../internalClipboard";
+import { recordClipboardActivity, recordConfirmedExternalPasteBlock } from "../clipboardActivity";
 
 /* Completely disables the VNC session to enable testing without backend */
 const NO_VNC = false;
@@ -17,10 +19,17 @@ export default function BrowserView(props) {
   const [alerted, setAlerted] = useState(false);
   const audioPlugin = useRef(null);
   const macPasteTimer = useRef(null);
+  const browserToCliPasteTimer = useRef(null);
   const pendingMacPaste = useRef(false);
   const browserCopyPending = useRef(false);
   const browserCopyTimer = useRef(null);
   const browserSelectionCandidate = useRef("");
+
+  // The RFB clipboard listener is installed once, when noVNC connects.
+  // A render-time ref avoids trapping the *initial* CLI/BROWSER tab inside
+  // that listener and misclassifying future CLI selections as Firefox copies.
+  const activeTabRef = useRef(props.currentTab);
+  activeTabRef.current = props.currentTab;
 
   const SHOW_DEBUG = DEV_MODE;
 
@@ -31,38 +40,32 @@ export default function BrowserView(props) {
   }
 
   function getInternalClipboard() {
-    return (
-      window.__NERDS_INTERNAL_CLIPBOARD__ ||
-      localStorage.getItem("NERDS_INTERNAL_CLIPBOARD") ||
-      ""
-    );
+    return getNerdsInternalClipboard();
   }
-
-  function setInternalClipboard(text, source) {
-    if (!text || text.length === 0) {
-      return;
+  function setInternalClipboard(text, source, options) {
+    setNerdsInternalClipboard(text, source, options);
+  }
+  function observedTextCandidate(source, text) {
+    // Never record content from a pending Firefox copy or cached fallback.
+    if (browserCopyPending.current) return undefined;
+    return getNerdsObservedClipboardText(source, text);
+  }
+  function handleConfirmedHostPaste(event) {
+    // A trusted native DOM paste into the VNC view is blocked here. Never
+    // inspect event.clipboardData, navigator.clipboard, or host contents.
+    // This does NOT detect blocked host pastes invisible to the DOM.
+    if (!event.isTrusted || !rfbElement.current ||
+        !rfbElement.current.contains(event.target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
     }
-
-    window.__NERDS_INTERNAL_CLIPBOARD__ = text;
-    localStorage.setItem("NERDS_INTERNAL_CLIPBOARD", text);
-    localStorage.setItem("NERDS_INTERNAL_CLIPBOARD_SOURCE", source);
-    localStorage.setItem(
-      "NERDS_INTERNAL_CLIPBOARD_TS",
-      String(Date.now())
-    );
-
-    window.dispatchEvent(
-      new CustomEvent("nerds-internal-clipboard", {
-        detail: { text, source }
-      })
-    );
-
-    console.log(
-      `NERDS internal clipboard saved from ${source}:`,
-      text
+    recordConfirmedExternalPasteBlock(
+      activeTabRef.current === "cli" ? "internal_cli" : "internal_browser",
+      "other_internal"
     );
   }
-
   function syncInternalClipboardToVnc() {
     if (!rfbObj.current) {
       return;
@@ -89,6 +92,18 @@ export default function BrowserView(props) {
       console.log(
         "NERDS internal clipboard is empty; VNC clipboard cleared"
       );
+    }
+  }
+
+  function syncUiClipboardOnVncFocus() {
+    // Xterm and Firefox own the actual X11 clipboard after copying. Sending
+    // the last React clipboard value on every mouse/focus or tab switch can
+    // overwrite a *newer CLI selection* with stale Firefox content.
+    // Explicit sidebar/guide Copy actions still need to be sent to VNC.
+    const source = getNerdsInternalClipboardSource();
+    if (source === "task_sidebar" || source === "fuzzing_guide" ||
+        source === "other_internal") {
+      syncInternalClipboardToVnc();
     }
   }
 
@@ -163,6 +178,19 @@ export default function BrowserView(props) {
         }, 20);
       }, 20);
     }, 20);
+  }
+
+  function sendVncShiftInsert() {
+    const rfb = rfbObj.current;
+    if (!rfb) return;
+
+    // CLI uses Shift+Insert rather than Firefox's Ctrl+V. The prior host
+    // keydown is stopped, so deliver precisely one remote paste shortcut.
+    releaseVncModifiers();
+    rfb.sendKey(0xffe1, null, true);  // Shift_L
+    rfb.sendKey(0xff63, null, true);  // Insert
+    rfb.sendKey(0xff63, null, false);
+    rfb.sendKey(0xffe1, null, false);
   }
 
   function finishMacPaste(reason) {
@@ -265,6 +293,75 @@ export default function BrowserView(props) {
   }
 
   function handleBrowserClipboardShortcut(e) {
+    // The legacy Monaco study intercepted Ctrl/Cmd+V before the browser could
+    // deliver host clipboard contents. In noVNC, a keydown is visible even
+    // when the native paste event is not. This records a *blocked host
+    // keyboard path*, NOT proof that a user had external text copied.
+    // CLI's supported internal paste shortcut is Shift+Insert.
+    const inVncView = !!(rfbElement.current &&
+      rfbElement.current.contains(e.target));
+    const pasteKey = (e.key || "").toLowerCase();
+    const isHostPasteKey = pasteKey === "v" && !e.altKey &&
+      ((e.ctrlKey && !e.metaKey) || (e.metaKey && !e.ctrlKey));
+    if (props.currentTab === "cli" && rfbStatus === "connected" &&
+        inVncView && isHostPasteKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === "function") {
+        e.stopImmediatePropagation();
+      }
+      if (!e.repeat) recordClipboardActivity({
+        kind: "host_paste_shortcut_blocked", surface: "internal_cli",
+        method: e.metaKey ? "meta_shortcut" : "ctrl_shortcut",
+        source: "unknown",
+      });
+      return;
+    }
+    // Passive CLI keyboard observation only for Shift+Insert.
+
+    // A Shift+Insert request does not prove that the terminal inserted text.
+    if (props.currentTab === "cli" && rfbStatus === "connected" &&
+        !e.repeat && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey &&
+        (e.key === "Insert" || e.code === "Numpad0") &&
+        rfbElement.current?.contains(e.target)) {
+      const source = getNerdsInternalClipboardSource();
+      const clipboardText = getNerdsInternalClipboard();
+      recordClipboardActivity({
+        kind: "paste_requested", surface: "internal_cli", method: "shift_insert",
+        source, text: observedTextCandidate(source, clipboardText),
+      });
+
+      // Explicit Firefox Ctrl+V already pushes its clipboard back through
+      // noVNC; CLI Shift+Insert did not. The X11 clipboard may still hold a
+      // previous selection, so synchronize *only* when Firefox originated
+      // this clipboard value, then send the remote paste after propagation.
+      // Do not alter native CLI->CLI, sidebar, or Guide paste behavior.
+      if (source === "internal_browser") {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === "function") {
+          e.stopImmediatePropagation();
+        }
+        if (browserToCliPasteTimer.current) {
+          clearTimeout(browserToCliPasteTimer.current);
+          browserToCliPasteTimer.current = null;
+        }
+        if (browserCopyPending.current || !clipboardText || !rfbObj.current) {
+          // Never inject the *previous* Firefox value while a new copy is
+          // pending. A subsequent Shift+Insert can retry after the copy.
+          console.warn("NERDs Firefox clipboard not ready for CLI paste");
+          return;
+        }
+        rfbObj.current.clipboardPasteFrom(clipboardText);
+        browserToCliPasteTimer.current = setTimeout(() => {
+          browserToCliPasteTimer.current = null;
+          if (activeTabRef.current === "cli" && rfbObj.current) {
+            sendVncShiftInsert();
+          }
+        }, 180);
+        return;
+      }
+    }
     if (
       props.currentTab !== "browser" ||
       rfbStatus !== "connected"
@@ -273,6 +370,16 @@ export default function BrowserView(props) {
     }
 
     const key = (e.key || "").toLowerCase();
+    // Sidebar copy uses a separate internal-only clipboard path.
+    // Do not hijack Ctrl/Cmd+C when the participant selected task text.
+    const selection = window.getSelection();
+    const taskArea = document.getElementById("taskWindow");
+    const copyingSidebarText = (key === "c" || key === "x") &&
+      taskArea && selection && !selection.isCollapsed &&
+      taskArea.contains(selection.anchorNode) &&
+      taskArea.contains(selection.focusNode);
+    if (copyingSidebarText || e.target?.closest?.("#taskWindow")) return;
+
 
     const isClipboardShortcut =
       (e.ctrlKey || e.metaKey) &&
@@ -294,6 +401,17 @@ export default function BrowserView(props) {
       e.stopImmediatePropagation();
     }
 
+    // The host's native browser clipboard shortcut was prevented above.
+    // Internal Firefox paste may still proceed through the separate VNC path.
+    // Only label the blocked host *path*, never the clipboard's origin.
+    if (key === "v" && !e.repeat && inVncView) {
+      recordClipboardActivity({
+        kind: "host_paste_shortcut_blocked", surface: "internal_browser",
+        method: e.metaKey ? "meta_shortcut" : "ctrl_shortcut",
+        source: "unknown",
+      });
+    }
+
   /*
    * Mac Cmd+V: record the paste request but do not send Ctrl+V until
    * the physical Command key has been released.
@@ -311,6 +429,11 @@ export default function BrowserView(props) {
         return;
       }
 
+      recordClipboardActivity({
+        kind: "paste_requested", surface: "internal_browser",
+        method: "meta_shortcut", source: getNerdsInternalClipboardSource(),
+        text: observedTextCandidate(getNerdsInternalClipboardSource(), getNerdsInternalClipboard()),
+      });
       syncInternalClipboardToVnc();
       pendingMacPaste.current = true;
 
@@ -333,6 +456,11 @@ export default function BrowserView(props) {
    * Preserve the working Ctrl+V behavior.
    */
     if (key === "v" && e.ctrlKey && !e.metaKey) {
+      if (!e.repeat) recordClipboardActivity({
+        kind: "paste_requested", surface: "internal_browser",
+        method: "ctrl_shortcut", source: getNerdsInternalClipboardSource(),
+        text: observedTextCandidate(getNerdsInternalClipboardSource(), getNerdsInternalClipboard()),
+      });
       syncInternalClipboardToVnc();
 
       setTimeout(() => {
@@ -350,6 +478,11 @@ export default function BrowserView(props) {
    * Firefox clipboard with older editor text.
    */
     if (key === "c") {
+      if (!e.repeat) recordClipboardActivity({
+        kind: "copy_requested", surface: "internal_browser",
+        method: e.metaKey ? "meta_shortcut" : "ctrl_shortcut",
+        source: "internal_browser",
+      });
       beginBrowserCopy();
       sendVncCtrlShortcut("c");
 
@@ -362,6 +495,11 @@ export default function BrowserView(props) {
     }
 
     if (key === "x") {
+      if (!e.repeat) recordClipboardActivity({
+        kind: "copy_requested", surface: "internal_browser",
+        method: e.metaKey ? "meta_shortcut" : "ctrl_shortcut",
+        source: "internal_browser",
+      });
       beginBrowserCopy();
       sendVncCtrlShortcut("x");
 
@@ -431,9 +569,9 @@ export default function BrowserView(props) {
     setAlerted(false);
     startAudio();
 
-    // Synchronize any editor text that was copied before connecting.
+    // Only locally copied UI text needs a VNC update at connect time.
     setTimeout(() => {
-      syncInternalClipboardToVnc();
+      syncUiClipboardOnVncFocus();
     }, 250);
   }
 
@@ -451,8 +589,7 @@ export default function BrowserView(props) {
   }
 
   function handleClipboard(stat) {
-    debug("Got clipboard event");
-    debug(stat.detail);
+    debug("Got clipboard event"); // Never log stat.detail: contains clipboard text.
 
     if (!stat.detail || !stat.detail.text) {
       return;
@@ -462,9 +599,12 @@ export default function BrowserView(props) {
 
     // CLI terminal clipboard:
     // Save text received from xterm as internal clipboard content.
-    if (props.currentTab === "cli") {
-      if (text !== getInternalClipboard()) {
-        setInternalClipboard(text, "internal_cli");
+    if (activeTabRef.current === "cli") {
+      // A new xterm selection updates both bytes and provenance. If the
+      // same bytes were previously copied in Firefox, the source changes.
+      if (text !== getInternalClipboard() ||
+          getNerdsInternalClipboardSource() !== "internal_cli") {
+        setInternalClipboard(text, "internal_cli", { observedFromVnc: true });
       }
 
       console.log("CLI clipboard received by NERDs");
@@ -485,7 +625,8 @@ export default function BrowserView(props) {
 
     setInternalClipboard(
       text,
-      "internal_browser"
+      "internal_browser",
+      { observedFromVnc: true }
     );
 
    console.log(
@@ -553,13 +694,11 @@ export default function BrowserView(props) {
     };
   }, []);
 
-  // Synchronize the internal clipboard when switching to Browser.
+  // Do not overwrite a fresh X11 CLI selection on a tab switch.
+  // Only explicit sidebar/guide copies need to be pushed to noVNC.
   useEffect(() => {
-    if (
-      props.currentTab === "browser" &&
-      rfbStatus === "connected"
-    ) {
-      syncInternalClipboardToVnc();
+    if (props.currentTab === "browser" && rfbStatus === "connected") {
+      syncUiClipboardOnVncFocus();
     }
   }, [props.currentTab, rfbStatus]);
 
@@ -649,6 +788,11 @@ export default function BrowserView(props) {
         macPasteTimer.current = null;
       }
 
+      if (browserToCliPasteTimer.current) {
+        clearTimeout(browserToCliPasteTimer.current);
+        browserToCliPasteTimer.current = null;
+      }
+
       if (browserCopyTimer.current) {
         clearTimeout(browserCopyTimer.current);
         browserCopyTimer.current = null;
@@ -688,8 +832,9 @@ export default function BrowserView(props) {
         className="viewContainer"
         ref={rfbElement}
         tabIndex={0}
-        onMouseDown={syncInternalClipboardToVnc}
-        onFocus={syncInternalClipboardToVnc}
+        onMouseDown={syncUiClipboardOnVncFocus}
+        onFocus={syncUiClipboardOnVncFocus}
+        onPasteCapture={handleConfirmedHostPaste}
       >
       </div>
     </div>

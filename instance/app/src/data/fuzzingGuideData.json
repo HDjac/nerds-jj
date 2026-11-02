@@ -47,7 +47,7 @@
   ],
   "notes": [
     "Use only the internal CLI and BROWSER tabs for study work. If you need AI or web search, open it inside the NERDs Browser so the study can capture relevant interactions.",
-    "Host-to-NERDs clipboard transfer is restricted; type the short commands in the CLI. Copy/paste between applications inside the NERDs desktop may be available.",
+    "To use a guide command, click Copy beside it, switch to CLI, and paste using Shift + Insert. The copy operation stays inside NERDs. Host-to-NERDs clipboard transfer remains restricted.",
     "After each task, choose Finish Task if you believe you have finished, or Skip Task if you want to stop without finishing. Both choices preserve work and advance the study.",
     "If a command fails, keep the output and try to understand the error. You are not required to find a crash."
   ]

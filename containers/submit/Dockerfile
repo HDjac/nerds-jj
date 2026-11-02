@@ -14,6 +14,8 @@ COPY --chown=user:user pilot1_ai_auth.py .
 COPY --chown=user:user pilot1_ai_db.py .
 COPY --chown=user:user pilot1_browser_db.py .
 COPY --chown=user:user pilot1_browser_payload.py .
+COPY --chown=user:user pilot1_clipboard_payload.py .
+COPY --chown=user:user pilot1_clipboard_db.py .
 COPY --chown=user:user configSubmit.py .
 COPY --chown=user:user tasks/ ./tasks/
 

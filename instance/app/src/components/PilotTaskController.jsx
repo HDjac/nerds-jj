@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { setNerdsInternalClipboard } from "../internalClipboard";
 import "./TaskController.css";
 import { FuzzingQuickStart, FuzzingGuideModal } from "./FuzzingGuide";
+import ClipboardGuideModal from "./ClipboardGuideModal";
 import { get_tasks, requestPilotTaskOutcome } from "../services";
 
 const TASK_NAMES = {
@@ -17,7 +19,52 @@ export default function PilotTaskController() {
   const [pendingOutcome, setPendingOutcome] = useState(null);
   const [sending, setSending] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [clipboardGuideOpen, setClipboardGuideOpen] = useState(false);
   const lastPosition = useRef(null);
+  const taskDescriptionRef = useRef(null);
+  const [copyStatus, setCopyStatus] = useState("");
+
+  function selectedTaskText() {
+    const selection = window.getSelection();
+    const element = taskDescriptionRef.current;
+    if (!element || !selection || selection.isCollapsed ||
+        !element.contains(selection.anchorNode) ||
+        !element.contains(selection.focusNode)) return "";
+    return selection.toString().trim();
+  }
+
+  function copyInsideNerds(text, label) {
+    if (!text || !setNerdsInternalClipboard(text, "task_description")) {
+      setCopyStatus("Select text from the task description first.");
+      return;
+    }
+    setCopyStatus(`${label} copied to the NERDs internal clipboard.`);
+  }
+
+  // Native Ctrl/Cmd+C while task text is selected must NOT reach the
+  // participant's host OS clipboard. Capture the document copy event even
+  // when an earlier click left focus on the noVNC canvas.
+  useEffect(() => {
+    function interceptSidebarCopy(event) {
+      const selection = window.getSelection();
+      const pane = document.getElementById("taskWindow");
+      // Cover task text, Quick Start, and both reference-guide dialogs.
+      // Never allow a native copy from these surfaces to reach the host clipboard.
+      if (!pane || !selection || selection.isCollapsed ||
+          !pane.contains(selection.anchorNode) ||
+          !pane.contains(selection.focusNode)) return;
+      const text = selection.toString().trim();
+      if (!text) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (setNerdsInternalClipboard(text, "task_sidebar")) {
+        setCopyStatus("Selected task-pane text copied inside NERDs.");
+      }
+    }
+    document.addEventListener("copy", interceptSidebarCopy, true);
+    return () => document.removeEventListener("copy", interceptSidebarCopy, true);
+  }, []);
+
 
   function openReceiptPage(receipt) {
     if (typeof receipt !== "string" || !/^[a-f0-9]{64}$/.test(receipt)) return false;
@@ -65,6 +112,10 @@ export default function PilotTaskController() {
         window.dispatchEvent(new CustomEvent("nerds:pilot-task-released", {
           detail: { position: active.position, task_code: active.task_code }
         }));
+      }
+      if (previous !== active.position) {
+        setCopyStatus("");
+        setClipboardGuideOpen(false);
       }
       lastPosition.current = active.position;
       window.sessionStorage.setItem("nerds-pilot1-task-position", String(active.position));
@@ -144,13 +195,29 @@ export default function PilotTaskController() {
         {task && !pendingOutcome && (
           <>
             <h3>Task {task.position} of 2</h3>
-            <div dangerouslySetInnerHTML={{ __html: task.desc }} />
+            <div className="pilotTaskGuideActions" role="group" aria-label="Study reference guides">
+              <button type="button" onClick={() => setGuideOpen(true)}>
+                View Fuzzing Guide
+              </button>
+              <button type="button" onClick={() => setClipboardGuideOpen(true)}>
+                View Copy/Paste Guide
+              </button>
+            </div>
+            <div ref={taskDescriptionRef} className="pilotTaskDescription"
+              dangerouslySetInnerHTML={{ __html: task.desc }} />
+            <div className="pilotTaskCopyControls" aria-label="Copy task instructions inside NERDs">
+              <button type="button" onMouseDown={(event) => event.preventDefault()}
+                onClick={() => copyInsideNerds(selectedTaskText(), "Selected text")}>Copy selected text</button>
+              <button type="button"
+                onClick={() => copyInsideNerds(taskDescriptionRef.current?.innerText?.trim(), "Task description")}>Copy task description</button>
+            </div>
+            <p className="pilotClipboardStatus" role="status" aria-live="polite">{copyStatus}</p>
             <hr />
             <p><strong>Current task:</strong> {TASK_NAMES[task.task_code]}</p>
             <p><strong>Working directory:</strong></p>
             <p><code>/home/user/fuzz-study/work</code></p>
             <p>You may use the CLI and internal browser throughout this task.</p>
-            <FuzzingQuickStart onOpen={() => setGuideOpen(true)} />
+            <FuzzingQuickStart onOpen={() => setGuideOpen(true)} showGuideButton={false} />
             <div className="pilotFinishControls">
               <div className="pilotOutcomeButtons">
                 <button type="button" disabled={sending || !!pendingOutcome}
@@ -168,13 +235,12 @@ export default function PilotTaskController() {
                 before finishing. Your choice will be recorded, and you will move on.
               </p>
             </div>
-            <div className="macClipboardNotice" role="note">
-              <strong>Mac users:</strong> In the Browser tab, use Control+C and Control+V
-              rather than Command+C and Command+V.
-            </div>
+
           </>
         )}
         {task && <FuzzingGuideModal open={guideOpen} onClose={() => setGuideOpen(false)} />}
+        {task && <ClipboardGuideModal open={clipboardGuideOpen}
+          onClose={() => setClipboardGuideOpen(false)} />}
       </div>
     </div>
   );

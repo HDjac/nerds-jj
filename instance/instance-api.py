@@ -286,6 +286,41 @@ def pilot1_browser_event():
     return jsonify({"ok": True}), 200
 
 
+@app.route("/log-clipboard-event", methods=["POST"])
+def pilot1_clipboard_event():
+    # Disabled by default until consent/disclosure review and backend rollout.
+    if (not getattr(CONFIG, "PILOT1_MODE", False) or
+            os.environ.get("PILOT1_CLIPBOARD_INGEST_ENABLED", "0") != "1"):
+        abort(404)
+    if request.content_length is None or request.content_length > 8192:
+        return jsonify({"error": "Invalid clipboard payload size"}), 413
+    from clipboard_observation import InvalidClipboardObservation, normalize_event
+    try:
+        with open("/opt/nerds/released-reference/active-task.json") as handle:
+            meta = json.load(handle)
+        data = normalize_event(
+            request.get_json(silent=True), meta,
+            allow_text=os.environ.get("PILOT1_CLIPBOARD_TEXT_ENABLED", "0") == "1")
+    except (OSError, ValueError, InvalidClipboardObservation):
+        return jsonify({"error": "Invalid or stale clipboard event"}), 409
+    try:
+        upstream = url_request.Request(
+            CONFIG.DB_URL.rstrip("/") + "/pilot1/clipboard-event",
+            data=json.dumps(data, separators=(",", ":")).encode("utf-8"),
+            headers={"Content-Type": "application/json"}, method="POST")
+        with url_request.urlopen(upstream, timeout=10) as response:
+            if response.status != 200:
+                raise RuntimeError("Clipboard observation not acknowledged")
+    except url_request.HTTPError as exc:
+        if exc.code == 409:
+            return jsonify({"error": "Stale clipboard event"}), 409
+        return jsonify({"error": "Clipboard ingestion unavailable"}), 503
+    except Exception:
+        # Do not log exception request bodies, which might contain clipboard text.
+        return jsonify({"error": "Clipboard ingestion unavailable"}), 503
+    return jsonify({"ok": True}), 200
+
+
 TESTING_DIR = "/home/user/testing"
 COMPILE_TIMEOUT = 120  # seconds
 

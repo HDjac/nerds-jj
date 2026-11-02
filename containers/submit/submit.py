@@ -16,6 +16,8 @@ from pilot1_ai_auth import authenticate_ai_request
 from pilot1_ai_db import store_ai_prompt
 from pilot1_browser_db import store_browser_event
 from pilot1_browser_payload import normalize_browser_observation
+from pilot1_clipboard_payload import normalize_clipboard_observation
+from pilot1_clipboard_db import store_clipboard_event
 from sqlalchemy.dialects.postgresql import JSON
 import datetime
 import json
@@ -33,6 +35,12 @@ app.config['PILOT1_BROWSER_INGEST_ENABLED'] = (
     os.environ.get('PILOT1_BROWSER_INGEST_ENABLED', '0') == '1'
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+app.config['PILOT1_AI_REGISTRY_PATH'] = os.environ.get(
+    'PILOT1_AI_REGISTRY_PATH',
+    '/run/nerds/registry/participants.json'
+)
+
 
 MAX_LENGTH = 1000000 #max length for json size
 NUM_RETRY = 5 # retry to fetch
@@ -275,6 +283,41 @@ def pilot1_ai_prompt():
     return jsonify({'ok': True, 'event_id': stored['event_id'],
                     'inserted': stored['inserted']}), 200
 
+
+
+
+@app.route('/pilot1/clipboard-event', methods=['POST'])
+def pilot1_clipboard_event():
+    """Trusted-gateway clipboard observation; disabled by default."""
+    if os.environ.get('PILOT1_CLIPBOARD_INGEST_ENABLED', '0') != '1':
+        return jsonify({'error':'Clipboard ingestion disabled'}),503
+    if request.content_length is None or request.content_length > 8192:
+        return jsonify({'error':'Clipboard request too large'}),413
+    try:
+        trusted_instance_id = authenticate_ai_request(
+            remote_addr=request.remote_addr, headers=request.headers,
+            registry_path=app.config.get('PILOT1_AI_REGISTRY_PATH', '/run/nerds/registry/participants.json'),
+            secret_path=app.config.get('PILOT1_AI_GATEWAY_SECRET_PATH', '/run/secrets/pilot1_ai_gateway_token'))
+    except PermissionError:
+        return jsonify({'error':'Unauthorized clipboard ingestion'}),403
+    try:
+        normalized = normalize_clipboard_observation(
+            request.get_json(silent=True),
+            allow_text=os.environ.get('PILOT1_CLIPBOARD_TEXT_ENABLED', '0') == '1')
+    except (TypeError, ValueError):
+        return jsonify({'error':'Invalid clipboard observation'}),400
+    try:
+        saved=store_clipboard_event(trusted_instance_id, normalized)
+    except Exception as exc:
+        reason=str(exc)
+        if ('Stale task clipboard observation' in reason or
+            'Conflicting clipboard event UUID' in reason):
+            return jsonify({'error':'Stale or conflicting clipboard event'}),409
+        if 'No eligible study session' in reason:
+            return jsonify({'error':'No eligible session'}),403
+        # Never log exception or request payload: may contain clipboard text.
+        return jsonify({'error':'Clipboard ingestion unavailable'}),503
+    return jsonify({'ok':True,'event_id':saved['event_id'],'inserted':saved['inserted']}),200
 
 @app.route('/pilot1/browser-event', methods=['POST'])
 def pilot1_browser_event():

@@ -1,4 +1,8 @@
 FROM node AS build
+ARG REACT_APP_NERDS_CLIPBOARD_INGEST=0
+ARG REACT_APP_NERDS_CLIPBOARD_TEXT=0
+ENV REACT_APP_NERDS_CLIPBOARD_INGEST=${REACT_APP_NERDS_CLIPBOARD_INGEST}
+ENV REACT_APP_NERDS_CLIPBOARD_TEXT=${REACT_APP_NERDS_CLIPBOARD_TEXT}
 WORKDIR /app/
 COPY ./app/package.json .
 COPY ./app/package-lock.json .
@@ -106,6 +110,7 @@ RUN emcc -I testing tasks/read.c testing/test_username.c -o /tmp/warmup.js \
 COPY --chown=user:user ./firefox.py .
 COPY --chown=user:user ./instance-api.py .
 COPY --chown=user:user ./browser_observation.py .
+COPY --chown=user:user ./clipboard_observation.py .
 COPY --chown=user:user ./browser_extension_origin.py .
 COPY ./config.py .
 COPY --from=build --chown=user:user /app/build /home/user/www
