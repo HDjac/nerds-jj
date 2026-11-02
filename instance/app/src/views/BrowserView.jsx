@@ -3,6 +3,7 @@ import RFB from "@novnc/novnc";
 import "./BrowserView.css";
 import AudioPlugin from "../lib/novnc-audio";
 import { DEV_MODE } from "../util";
+import { getWorkspaceFocus } from "../services";
 import { getNerdsInternalClipboard, getNerdsInternalClipboardSource, getNerdsObservedClipboardText, setNerdsInternalClipboard } from "../internalClipboard";
 import { recordClipboardActivity, recordConfirmedExternalPasteBlock } from "../clipboardActivity";
 
@@ -50,6 +51,27 @@ export default function BrowserView(props) {
     if (browserCopyPending.current) return undefined;
     return getNerdsObservedClipboardText(source, text);
   }
+  function classifyPointerFocus(event) {
+    syncUiClipboardOnVncFocus();
+    if (!props.splitMode) return;
+    // The pointer is on the one shared X11 canvas. This immediate target is
+    // provisional; the periodic X11 focus query is authoritative.
+    const width = props.splitPercent;
+    const target = width == null ? "unknown" : (() => {
+      const element = rfbElement.current;
+      const canvas = element?.querySelector("canvas");
+      const rect = (canvas || element)?.getBoundingClientRect();
+      if (!rect?.width) return "unknown";
+      const ratio = (event.clientX - rect.left) / rect.width * 100;
+      if (ratio < 0 || ratio > 100) return "unknown";
+      return ratio < width ? "cli" : "browser";
+    })();
+    if (target !== "unknown") props.onFocusedWorkspace?.(target);
+    window.setTimeout(() => getWorkspaceFocus().then(value => {
+      if (value === "cli" || value === "browser") props.onFocusedWorkspace?.(value);
+    }), 100);
+  }
+
   function handleConfirmedHostPaste(event) {
     // A trusted native DOM paste into the VNC view is blocked here. Never
     // inspect event.clipboardData, navigator.clipboard, or host contents.
@@ -61,10 +83,12 @@ export default function BrowserView(props) {
     if (typeof event.stopImmediatePropagation === "function") {
       event.stopImmediatePropagation();
     }
-    recordConfirmedExternalPasteBlock(
-      activeTabRef.current === "cli" ? "internal_cli" : "internal_browser",
-      "other_internal"
-    );
+    if (activeTabRef.current === "cli" || activeTabRef.current === "browser") {
+      recordConfirmedExternalPasteBlock(
+        activeTabRef.current === "cli" ? "internal_cli" : "internal_browser",
+        "other_internal"
+      );
+    }
   }
   function syncInternalClipboardToVnc() {
     if (!rfbObj.current) {
@@ -303,6 +327,16 @@ export default function BrowserView(props) {
     const pasteKey = (e.key || "").toLowerCase();
     const isHostPasteKey = pasteKey === "v" && !e.altKey &&
       ((e.ctrlKey && !e.metaKey) || (e.metaKey && !e.ctrlKey));
+    // If focus is ambiguous in split view, fail closed: do not let the host
+    // clipboard enter noVNC and do not invent a source/destination.
+    if (props.splitMode && props.currentTab === "unknown" && inVncView &&
+        (isHostPasteKey || (e.ctrlKey || e.metaKey) &&
+         ["c", "x"].includes(pasteKey))) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation?.();
+      return;
+    }
     if (props.currentTab === "cli" && rfbStatus === "connected" &&
         inVncView && isHostPasteKey) {
       e.preventDefault();
@@ -551,8 +585,8 @@ export default function BrowserView(props) {
 
     const rfb = new RFB(rfbElement.current, vncURL);
 
-    // rfb.scaleViewport = true;
-    rfb.resizeSession = true;
+    rfb.scaleViewport = !!props.splitMode;
+    rfb.resizeSession = !props.splitMode;
     rfb.background = "#494949";
 
     rfb.addEventListener("connect", handleConnect);
@@ -588,18 +622,26 @@ export default function BrowserView(props) {
     }
   }
 
-  function handleClipboard(stat) {
+  async function handleClipboard(stat) {
     debug("Got clipboard event"); // Never log stat.detail: contains clipboard text.
 
     if (!stat.detail || !stat.detail.text) {
       return;
     }
 
+    // In a split workspace, the old selected-tab heuristic is invalid.
+    // Query the actual focused X11 window. Unknown means no text collection.
+    const sourceWindow = props.splitMode
+      ? await getWorkspaceFocus() : activeTabRef.current;
+    if (sourceWindow !== "cli" && sourceWindow !== "browser") {
+      console.warn("NERDs clipboard source unknown; observation ignored");
+      return;
+    }
     const text = stat.detail.text;
 
     // CLI terminal clipboard:
     // Save text received from xterm as internal clipboard content.
-    if (activeTabRef.current === "cli") {
+    if (sourceWindow === "cli") {
       // A new xterm selection updates both bytes and provenance. If the
       // same bytes were previously copied in Firefox, the source changes.
       if (text !== getInternalClipboard() ||
@@ -663,6 +705,9 @@ export default function BrowserView(props) {
     if (width !== 0) {
       debug(`Setting width to ${width}px`);
       rfbElement.current.style.width = `${width}px`;
+      if (props.splitMode) {
+        rfbElement.current.style.height = `${Math.round(containerElement.current.offsetHeight)}px`;
+      }
     }
   }
 
@@ -832,7 +877,7 @@ export default function BrowserView(props) {
         className="viewContainer"
         ref={rfbElement}
         tabIndex={0}
-        onMouseDown={syncUiClipboardOnVncFocus}
+        onMouseDown={classifyPointerFocus}
         onFocus={syncUiClipboardOnVncFocus}
         onPasteCapture={handleConfirmedHostPaste}
       >
