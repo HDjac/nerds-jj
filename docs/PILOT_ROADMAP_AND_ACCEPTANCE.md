@@ -67,6 +67,10 @@ Legend: **DONE** = implemented and locally demonstrated in its specified scope;
 - Replace tab-based clipboard destination inference with the **actual focused remote X11 application/window** and correctly handle focus changes, copy/cut/paste shortcuts, and ambiguous interactions.
 - Verify noVNC resize behavior, terminal selection, internal Firefox, clipboard restrictions, and collection while both panes are visible.
 
+**Live attempt and compatibility finding:** The first R2D.2 deployment automatically rolled back after an HTTP 503 from the window-tiling endpoint. In the original participant display, Matchbox reported both xterm and Firefox as full-screen windows (1923 × 750). This is a window-manager constraint rather than a failed frontend build. API and noVNC services remained running, and the prior R2D.1 frontend/API were restored.
+
+**Revised implementation:** Use Openbox for the VNC session (`instance/services/vnc/run` and Docker image) and perform a reversible local WM migration with `scripts/r2d2_openbox_live.py`. Changing WM requires a **VNC display restart**, which can close GUI programs / interrupt an active fuzzing command; never perform while a campaign is running. The participant's database, task assignment and Docker container persist. The frontend/API update remains a separate reversible `scripts/r2d2_live.py apply` action. Verify real CLI and Firefox windows, divider, focus and clipboard, then accept.
+
 **Gate:** Continuous CLI + Firefox usability, reproducible task transitions, correct source/destination metadata, host clipboard isolation.
 
 ## 2D.3 — Conventional Google Search and browser reliability
