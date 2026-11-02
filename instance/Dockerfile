@@ -30,6 +30,7 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -yqq \
     pulseaudio \
     tigervnc-standalone-server \
     matchbox-window-manager \
+    openbox \
     firefox-esr \
     socat \
     gstreamer1.0-tools \
