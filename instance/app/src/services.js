@@ -156,11 +156,38 @@ function activateWorkspace(target) {
   });
 }
 
+function setWorkspaceLayout(mode, cli_percent = 50) {
+  if (!["split", "cli", "browser"].includes(mode) ||
+      !Number.isInteger(cli_percent) || cli_percent < 30 || cli_percent > 70) {
+    return Promise.reject(new Error("Invalid split workspace layout"));
+  }
+  return fetch(`${API_BASE_PATH}/workspace/layout`, {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    cache: "no-store",
+    body: JSON.stringify({mode, cli_percent}),
+  }).then(async response => {
+    if (!response.ok) throw new Error(`Split layout unavailable (${response.status})`);
+    return response.json();
+  });
+}
+
+function getWorkspaceFocus() {
+  return fetch(`${API_BASE_PATH}/workspace/focus`, {cache: "no-store"})
+    .then(async response => {
+      if (!response.ok) return "unknown";
+      const value = (await response.json()).focus;
+      return ["cli", "browser"].includes(value) ? value : "unknown";
+    }).catch(() => "unknown");
+}
+
 export {
   submit,
   get_tasks,
   set_resolution,
   compile,
   activateWorkspace,
+  setWorkspaceLayout,
+  getWorkspaceFocus,
   requestPilotTaskOutcome
 };
