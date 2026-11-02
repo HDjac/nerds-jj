@@ -15,4 +15,12 @@ style.textContent = [
   'a[href*="&udm=50"]',
   'a[href*="?udm=50"]'
 ].join(",") + "{display:none!important}";
-(document.documentElement || document.head)?.appendChild(style);
+function applyNerdsGoogleWebStyle() {
+  const root = document.documentElement || document.head;
+  if (!root) return false;
+  if (!document.getElementById(style.id)) root.appendChild(style);
+  return true;
+}
+if (!applyNerdsGoogleWebStyle()) {
+  document.addEventListener("DOMContentLoaded", applyNerdsGoogleWebStyle, { once: true });
+}
