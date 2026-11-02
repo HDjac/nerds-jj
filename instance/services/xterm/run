@@ -22,6 +22,8 @@ export HISTFILE=/dev/null
 exec xterm \
     -title "NERDs CLI" \
     -geometry 110x32 \
+    -sl 10000 \
+    -sb \
     -xrm 'XTerm*selectToClipboard: true' \
     -e /usr/bin/script \
         -q -f -e \
