@@ -10,10 +10,69 @@ import Header from "./components/Header";
 import useFocusTime from "./hooks/useFocusTime";
 import useSavedState from "./hooks/useSavedState";
 import useTaskState from "./hooks/useTaskState";
-import {submit, compile, activateWorkspace} from "./services";
+import {submit, compile, activateWorkspace, setWorkspaceLayout, getWorkspaceFocus} from "./services";
+
+const SPLIT_WORKSPACE = process.env.REACT_APP_NERDS_SPLIT_WORKSPACE === "1";
 
 function App() {
   const [tab, setTab] = useSavedState("tab", "cli");
+  const [workspaceMode, setWorkspaceMode] = useSavedState("r2d-workspace-mode", "split");
+  const [cliWidth, setCliWidth] = useSavedState("r2d-cli-width", 50);
+  const [dragWidth, setDragWidth] = useState(null);
+  const [focusedApp, setFocusedApp] = useState("unknown");
+  const [layoutError, setLayoutError] = useState("");
+  const surfaceRef = useRef(null);
+  const draggingRef = useRef(false);
+  const activeWidth = dragWidth ?? cliWidth;
+  const mode = ["split", "cli", "browser"].includes(workspaceMode) ? workspaceMode : "split";
+  const safeWidth = Number.isInteger(cliWidth) && cliWidth >= 30 && cliWidth <= 70 ? cliWidth : 50;
+
+  function applyLayout(nextMode, nextWidth = safeWidth) {
+    setLayoutError("");
+    setWorkspaceLayout(nextMode, nextWidth).then(result => {
+      if (result.focus === "cli" || result.focus === "browser") setFocusedApp(result.focus);
+    }).catch(error => setLayoutError(error.message));
+  }
+
+  function chooseMode(nextMode) {
+    setWorkspaceMode(nextMode);
+    if (nextMode === "cli" || nextMode === "browser") {
+      setFocusedApp(nextMode);
+    }
+    applyLayout(nextMode);
+  }
+
+  function updateDrag(clientX) {
+    const bounds = surfaceRef.current?.getBoundingClientRect();
+    if (!bounds?.width) return;
+    const next = Math.round((clientX - bounds.left) / bounds.width * 100);
+    setDragWidth(Math.max(30, Math.min(70, next)));
+  }
+
+  function startDivider(event) {
+    if (event.button !== 0) return;
+    draggingRef.current = true;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updateDrag(event.clientX);
+    event.preventDefault();
+  }
+
+  function moveDivider(event) {
+    if (draggingRef.current) updateDrag(event.clientX);
+  }
+
+  function finishDivider(event) {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    const bounds = surfaceRef.current?.getBoundingClientRect();
+    const next = bounds?.width
+      ? Math.max(30, Math.min(70, Math.round((event.clientX - bounds.left) / bounds.width * 100)))
+      : safeWidth;
+    setDragWidth(null);
+    setCliWidth(next);
+    applyLayout("split", next);
+  }
+
   const [connStatus, setConnStatus] = useState(false);
   const [taskno, set_taskno] = useSavedState("taskno", 0);
   const [task_list, set_task_list] = useSavedState("task_list", [
@@ -106,34 +165,50 @@ function App() {
     }
   }, [tab, setTab]);
 
-  // The trusted host archives and replaces the workspace between tasks.
-  // After /api/tasks reports the newly released task, show its *new* CLI
-  // window, even when BROWSER was previously selected.
+  // Task transitions must retile the new xterm without losing Firefox.
   useEffect(() => {
     const onReleasedTask = () => {
-      setTab("cli");
-      activateWorkspace("cli").catch((err) => {
-        console.warn("New CLI window is starting:", err);
-        window.setTimeout(() => {
-          activateWorkspace("cli").catch(() => {});
-        }, 1500);
-      });
+      if (SPLIT_WORKSPACE) {
+        setFocusedApp("unknown");
+        window.setTimeout(() => applyLayout(mode, safeWidth), 1300);
+      } else {
+        setTab("cli");
+        activateWorkspace("cli").catch(() => {
+          window.setTimeout(() => activateWorkspace("cli").catch(() => {}), 1500);
+        });
+      }
     };
     window.addEventListener("nerds:pilot-task-released", onReleasedTask);
     return () => window.removeEventListener("nerds:pilot-task-released", onReleasedTask);
-  }, [setTab]);
+  });
 
-  // Switch the active Linux window when the participant
-  // selects CLI or BROWSER.
+  // Keep the original tabbed behavior when the split feature is disabled.
   useEffect(() => {
-    if (!connStatus) return;
-
+    if (!connStatus || SPLIT_WORKSPACE) return;
     if (tab === "cli" || tab === "browser") {
-      activateWorkspace(tab).catch((error) => {
-        console.error("Workspace switching failed:", error);
-      });
+      activateWorkspace(tab).catch(error => console.error("Workspace switching failed:", error));
     }
   }, [tab, connStatus]);
+
+  // Get the focused remote X11 window. Never assume that an HTML toolbar
+  // selection proves where clipboard data originated.
+  useEffect(() => {
+    if (!SPLIT_WORKSPACE || !connStatus) return undefined;
+    let mounted = true;
+    const update = () => getWorkspaceFocus().then(value => {
+      if (mounted) setFocusedApp(value);
+    });
+    update();
+    const interval = window.setInterval(update, 500);
+    return () => { mounted = false; window.clearInterval(interval); };
+  }, [connStatus]);
+
+  // Reapply split layout once on VNC connect and on fresh page load.
+  useEffect(() => {
+    if (!SPLIT_WORKSPACE || !connStatus) return undefined;
+    applyLayout(mode, safeWidth);
+    return undefined;
+  }, [connStatus]);
 
   function submit_code(statusCode, extraData) {
     // Do some submitting
@@ -230,17 +305,57 @@ function App() {
         />
         <div className="views-container">
           <div className="navBar">
-            <TabNav tab={tab} setTab={setTab}/>
+            {SPLIT_WORKSPACE ? (
+              <div className="workspaceModeControls" role="group" aria-label="Workspace layout">
+                {["split", "cli", "browser"].map(choice => (
+                  <button key={choice} type="button" aria-pressed={mode === choice}
+                    onClick={() => chooseMode(choice)}>
+                    {choice === "split" ? "Split view" : choice === "cli" ? "CLI only" : "Firefox only"}
+                  </button>
+                ))}
+              </div>
+            ) : <TabNav tab={tab} setTab={setTab}/>}
             <div className="statusBar">
+              {SPLIT_WORKSPACE && <span className="focusedAppIndicator">
+                Focus: {focusedApp === "cli" ? "CLI" : focusedApp === "browser" ? "Firefox" : "unknown"}
+              </span>}
               <StatusDot label="Connection" status={connStatus}/>
             </div>
           </div>
+          {SPLIT_WORKSPACE && layoutError && (
+            <p className="workspaceLayoutError" role="alert">{layoutError}.
+              Use CLI only or Firefox only if the window manager cannot tile both applications.</p>
+          )}
           <div className="tab-views">
-            <div className="tabView">
+            <div className="tabView workspaceSurface" ref={surfaceRef}>
               <BrowserView
                 setConnStatus={setConnStatus}
-                currentTab={tab}
+                currentTab={SPLIT_WORKSPACE ? focusedApp : tab}
+                splitMode={SPLIT_WORKSPACE}
+                splitPercent={mode === "split" ? activeWidth : null}
+                onFocusedWorkspace={setFocusedApp}
               />
+              {SPLIT_WORKSPACE && mode === "split" && (
+                <div className="workspaceDivider" role="separator"
+                  aria-label="Resize CLI and Firefox panes"
+                  aria-orientation="vertical" aria-valuenow={activeWidth}
+                  aria-valuemin={30} aria-valuemax={70} tabIndex={0}
+                  style={{left: `${activeWidth}%`}}
+                  onPointerDown={startDivider}
+                  onPointerMove={moveDivider}
+                  onPointerUp={finishDivider}
+                  onPointerCancel={() => { draggingRef.current = false; setDragWidth(null); }}
+                  onKeyDown={event => {
+                    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+                    event.preventDefault();
+                    const next = Math.max(30, Math.min(70,
+                      safeWidth + (event.key === "ArrowLeft" ? -5 : 5)));
+                    setCliWidth(next);
+                    applyLayout("split", next);
+                  }}>
+                  <span className="workspaceDividerGrip">⋮</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
