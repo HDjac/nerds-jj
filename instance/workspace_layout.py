@@ -253,9 +253,16 @@ def _place_split(windows, width, height, percent):
 
     edge = max(300, round(width * percent / 100))
     requested_cli_width = edge - 4
-    _command("wmctrl", "-ir", windows["cli"], "-e",
-             f"0,0,0,{max(300, requested_cli_width)},{height}")
-    time.sleep(0.04)
+    # Avoid unnecessary xterm SIGWINCH/scrollback jumps when participants
+    # reselect Split View or use Restore windows at the same proportions.
+    prior_cli = current_geometry(windows).get("cli")
+    desired_cli = max(300, requested_cli_width)
+    if (prior_cli is None or abs(prior_cli[0]) > 5 or abs(prior_cli[1]) > 5
+            or abs(prior_cli[2] - desired_cli) > 14
+            or abs(prior_cli[3] - height) > 14):
+        _command("wmctrl", "-ir", windows["cli"], "-e",
+                 f"0,0,0,{desired_cli},{height}")
+        time.sleep(0.04)
     measured = current_geometry(windows)
     cli = measured.get("cli")
     if cli is None:
@@ -331,12 +338,19 @@ def set_layout(mode, cli_percent=50):
         divider_percent = round(100 * (cli[0] + cli[2]) / width, 2)
         clamped = candidate != cli_percent
     else:
-        # Fullscreen modes preserve the other application. Switching back
-        # to Split restores both without restarting Firefox or xterm.
-        for xid in windows.values():
+        # Expand ONLY the requested application. Previously Firefox-only
+        # resized xterm to full desktop width behind Firefox, and a return
+        # to split resized it back. Those invisible resizes made terminal
+        # history unexpectedly jump, even when the participant never used
+        # the CLI-only view.
+        xid = windows[mode]
+        current = current_geometry(windows).get(mode)
+        if (current is None or abs(current[0]) > 5 or abs(current[1]) > 5
+                or abs(current[2] - width) > 14
+                or abs(current[3] - height) > 14):
             _command("wmctrl", "-ir", xid, "-e",
                      f"0,0,0,{width},{height}")
-        _command("wmctrl", "-ia", windows[mode])
+        _command("wmctrl", "-ia", xid)
         geometry = current_geometry(windows)
         divider_percent = cli_percent
         clamped = False
