@@ -20,6 +20,7 @@ RUN apt-get update && DEBIAN_FRONTEND="noninteractive" apt-get install -yqq \
     xfonts-base \
     unzip \
     wmctrl \
+    x11-utils \
     python3 \
     python3-dev \
     python3-flask \
@@ -110,6 +111,7 @@ RUN emcc -I testing tasks/read.c testing/test_username.c -o /tmp/warmup.js \
 COPY --chown=user:user ./firefox.py .
 COPY --chown=user:user ./instance-api.py .
 COPY --chown=user:user ./pilot1_task_descriptions.py .
+COPY --chown=user:user ./workspace_layout.py .
 COPY --chown=user:user ./browser_observation.py .
 COPY --chown=user:user ./clipboard_observation.py .
 COPY --chown=user:user ./browser_extension_origin.py .
