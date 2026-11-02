@@ -217,7 +217,21 @@ def apply():
 
 def rollback():
     ensure_running()
-    sh(f"test -d {PREFIX}-old-www && test -f {PREFIX}-old-run && test -f {PREFIX}-old-api.py")
+    has_backup = sh(
+        f"test -d {PREFIX}-old-www && test -f {PREFIX}-old-run && "
+        f"test -f {PREFIX}-old-api.py && echo yes || echo no",
+        output=True)
+    if has_backup != "yes":
+        failed = sh(
+            f"test -d {PREFIX}-failed-www && "
+            f"test -f {PREFIX}-failed-run && echo yes || echo no",
+            output=True)
+        if failed == "yes":
+            print("ALREADY RESTORED: Automatic activation rollback returned "
+                  "the original R2D.1 frontend and API.")
+            print("No changes made. Existing task and data retained.")
+            return
+        raise RuntimeError("R2D.2 backup not found; no changes made")
     # Return the native desktop to the original CLI-first single-window view.
     # Ignore failure: rollback must work even if the split backend is broken.
     script = (
