@@ -30,8 +30,8 @@ Legend: **DONE** = implemented and locally demonstrated in its specified scope;
 | ADV-02 | Explain copy/paste for sidebar, CLI, Firefox while blocking host clipboard | DONE (local) | 2A / 2C | Guide, host isolation, all permitted directions tested; recheck in split view |
 | ADV-03 | Collect permitted clipboard actions and scoped pasted text with safeguards | DONE (local) | 2B / 2C | Event IDs 3171/3275/3337 exact; five text records; zero excluded-source text records in local audit |
 | ADV-04 | Increase command/example readability | PARTIAL | 2D.1 | Inspect sidebar, guide and xterm at actual participant resolutions |
-| ADV-05 | Explain all three harnesses, corpus, and target program purpose without revealing vulnerabilities | PARTIAL | 2D.1 | Neutral, complete task-specific instructions approved by advisor |
-| ADV-06 | Anonymous Task 1 / Task 2 in participant interface | OPEN | 2D.1 | No Dense/Low-Yield labels shown; true task codes preserved server-side |
+| ADV-05 | Explain all three harnesses, corpus, and target program purpose without revealing vulnerabilities | IMPLEMENTED; awaiting UI/advisor review | 2D.1 | Neutral, task-specific descriptions and three-harness guide implemented; review in live UI |
+| ADV-06 | Anonymous Task 1 / Task 2 in participant interface | IMPLEMENTED; awaiting UI check | 2D.1 | API/React labels changed; internal task codes retained; verify both orders |
 | ADV-07 | Browser search terms and visited URL observations | PARTIAL | 2D.3 / 2D.4 | Normal searches, navigation, task transitions, recovery and DB attribution verified |
 | ADV-08 | Avoid Google Search AI summaries/AI Mode as a default or uncollected chat surface | OPEN | 2D.3 | Web-only results by default; AI Mode entry routes blocked or safely handled and tested |
 | ADV-09 | Capture AI responses in addition to supported prompts | DEFERRED | Release 3 | Captured responses correctly associated with prompts/tasks; failures detectable |
@@ -47,6 +47,14 @@ Legend: **DONE** = implemented and locally demonstrated in its specified scope;
 - Do not alter randomized order, archived work, or task decision semantics.
 
 **Gate:** A new tester can start the appropriate task without outside coaching; neither hidden condition is disclosed.
+
+### Release 2D.1 implementation checkpoint (source only)
+
+- `instance/pilot1_task_descriptions.py` builds participant-facing Task 1/2 descriptions from neutral program overviews and shared harness/corpus instructions.
+- `instance/instance-api.py` now returns anonymous `title`/`desc` while preserving the `task_code` for collection and task-transition logic; `instance/Dockerfile` installs the helper.
+- `PilotTaskController.jsx` displays only Task 1/2; `fuzzingGuideData.json` has a dedicated three-harness explanation.
+- Source-level tests: `instance/test_pilot1_task_descriptions.py`; repeatable validation: `bash scripts/r2d1_verify.sh`.
+- **Not yet accepted:** React production build, isolated participant deployment, browser visual/readability review at 1280x720, both randomized task orders, advisor review, and active CLI/font check. Existing Release 2C participant remains untouched.
 
 ## 2D.2 — Resizable split workspace
 
