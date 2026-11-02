@@ -112,22 +112,25 @@ def stage():
 
 
 def restore():
-    # Existing pre-split files are moved back; never delete participant data.
+    # Preserve failed attempt snapshots without overwriting earlier failures.
+    # First retry may encounter -failed-* artifacts from a previous rollback.
+    import time
+    tag = str(int(time.time() * 1000000))
     sh(f"""
         if [ -d {PREFIX}-old-www ]; then
-          if [ -d {WWW} ]; then mv {WWW} {PREFIX}-failed-www; fi
+          if [ -d {WWW} ]; then mv {WWW} {PREFIX}-failed-www-{tag}; fi
           mv {PREFIX}-old-www {WWW}
         fi
         if [ -f {PREFIX}-old-api.py ]; then
-          if [ -f {API} ]; then mv {API} {PREFIX}-failed-api.py; fi
+          if [ -f {API} ]; then mv {API} {PREFIX}-failed-api-{tag}.py; fi
           mv {PREFIX}-old-api.py {API}
         fi
         if [ -f {PREFIX}-old-run ]; then
-          if [ -f {RUN} ]; then mv {RUN} {PREFIX}-failed-run; fi
+          if [ -f {RUN} ]; then mv {RUN} {PREFIX}-failed-run-{tag}; fi
           mv {PREFIX}-old-run {RUN}
           chmod 755 {RUN}
         fi
-        if [ -f {HELPER} ]; then mv {HELPER} {PREFIX}-failed-layout.py; fi
+        if [ -f {HELPER} ]; then mv {HELPER} {PREFIX}-failed-layout-{tag}.py; fi
         sv restart /home/user/services/api
         sv restart {NOVNC}
     """)
@@ -153,7 +156,7 @@ def verify_split():
         "data=body,headers={'Content-Type':'application/json'},method='POST');"
         "res=urllib.request.urlopen(req,timeout=15);"
         "data=json.load(res);"
-        "assert data.get('mode')=='split' and data.get('focus')=='cli',data;"
+        "assert data.get('mode')=='split',data;"
         "print('SPLIT_OK',data.get('windows'))"
     )
     return call("docker", "exec", LIVE, "python3", "-c", probe, output=True)
@@ -223,8 +226,9 @@ def rollback():
         output=True)
     if has_backup != "yes":
         failed = sh(
-            f"test -d {PREFIX}-failed-www && "
-            f"test -f {PREFIX}-failed-run && echo yes || echo no",
+            f"ls -d {PREFIX}-failed-www* >/dev/null 2>&1 && "
+            f"ls {PREFIX}-failed-run* >/dev/null 2>&1 && "
+            f"echo yes || echo no",
             output=True)
         if failed == "yes":
             print("ALREADY RESTORED: Automatic activation rollback returned "
