@@ -221,23 +221,85 @@ def screen_size():
     return width, height
 
 
-def current_geometry():
-    """Return bounded window extents to detect window-manager failures."""
+def current_geometry(window_ids=None):
+    """Read geometry for the pinned windows, not arbitrary Firefox windows.
+
+    Several Firefox windows may be open. The last entry from wmctrl is not
+    necessarily the participant workspace window selected by _windows().
+    """
+    window_ids = window_ids if window_ids is not None else _windows()
+    by_id = {int(xid, 16): kind for kind, xid in window_ids.items()}
     result = {}
     for line in _command("wmctrl", "-lGx").splitlines():
         parts = line.split(None, 8)
-        if len(parts) < 8:
-            continue
-        cls = parts[6].lower()
-        kind = ("cli" if cls == "xterm.xterm" else
-                "browser" if cls.endswith(".firefox-esr") else None)
-        if not kind:
+        if len(parts) < 7:
             continue
         try:
-            result[kind] = tuple(int(parts[n]) for n in (2, 3, 4, 5))
+            kind = by_id.get(int(parts[0], 16))
+            if kind:
+                result[kind] = tuple(int(parts[n]) for n in (2, 3, 4, 5))
         except ValueError:
             continue
     return result
+
+
+def _place_split(windows, width, height, percent):
+    """Attempt a split and return measured geometry, or reject that width.
+
+    Window managers enforce minimum Firefox/xterm dimensions independently.
+    A requested split may be impossible even if wmctrl accepts the command.
+    """
+    import time
+
+    edge = max(300, round(width * percent / 100))
+    requested_cli_width = edge - 4
+    _command("wmctrl", "-ir", windows["cli"], "-e",
+             f"0,0,0,{max(300, requested_cli_width)},{height}")
+    time.sleep(0.04)
+    measured = current_geometry(windows)
+    cli = measured.get("cli")
+    if cli is None:
+        return None
+
+    cli_right = cli[0] + cli[2]
+    browser_x = max(300, cli_right + 2)
+    browser_requested_width = max(300, width - browser_x)
+    _command("wmctrl", "-ir", windows["browser"], "-e",
+             f"0,{browser_x},0,{browser_requested_width},{height}")
+
+    # Restore iconified windows before reading their real onscreen geometry.
+    _command("wmctrl", "-ia", windows["browser"])
+    _command("wmctrl", "-ia", windows["cli"])
+    time.sleep(0.05)
+    measured = current_geometry(windows)
+    cli = measured.get("cli")
+    browser = measured.get("browser")
+    if cli is None or browser is None:
+        return None
+
+    cli_right = cli[0] + cli[2]
+    browser_right = browser[0] + browser[2]
+    # Reject a split only if it actually places panes incorrectly or clips
+    # one past the display. The caller will retry a less extreme percentage.
+    if (abs(browser[0] - cli_right) > 35
+            or browser_right > width + 45
+            or cli[2] < 280
+            or browser[2] < 300):
+        return None
+    return measured
+
+
+def _split_candidates(requested):
+    """Try the requested percentage and progressively retreat to 50/50."""
+    if requested < 50:
+        options = list(range(requested, 51, 3))
+    elif requested > 50:
+        options = list(range(requested, 49, -3))
+    else:
+        options = [50]
+    if 50 not in options:
+        options.append(50)
+    return list(dict.fromkeys(options))
 
 
 def set_layout(mode, cli_percent=50):
@@ -250,66 +312,39 @@ def set_layout(mode, cli_percent=50):
     if "cli" not in windows or "browser" not in windows:
         raise WorkspaceLayoutError("Both CLI and Firefox must be running")
     width, height = screen_size()
-    # The divider is a drawn HTML overlay; leave an 8px native gap under it.
-    edge = max(300, round(width * cli_percent / 100))
-    gap = 8
-    if mode == "split":
-        bounds = {
-            "cli": (0, 0, edge - gap // 2, height),
-            "browser": (edge + gap // 2, 0, width - edge - gap // 2, height),
-        }
-    else:
-        bounds = {
-            mode: (0, 0, width, height),
-            ("browser" if mode == "cli" else "cli"): (0, 0, width, height),
-        }
 
-    # Terminal widths are rounded to character columns by XTerm. Measure the
-    # actual right edge before positioning Firefox to prevent a black gap.
     for xid in windows.values():
-        _command("wmctrl", "-ir", xid, "-b", "remove,maximized_vert,maximized_horz")
+        _command("wmctrl", "-ir", xid, "-b",
+                 "remove,maximized_vert,maximized_horz")
+
     if mode == "split":
-        x, y, w, h = bounds["cli"]
-        _command("wmctrl", "-ir", windows["cli"], "-e",
-                 f"0,{x},{y},{max(300, w)},{max(250, h)}")
-        actual = current_geometry().get("cli")
-        if actual is None:
-            raise WorkspaceLayoutError("CLI geometry unavailable")
-        browser_x = max(300, actual[0] + actual[2] + 2)
-        _command("wmctrl", "-ir", windows["browser"], "-e",
-                 f"0,{browser_x},0,{max(300, width - browser_x)},{height}")
+        geometry = None
+        for candidate in _split_candidates(cli_percent):
+            geometry = _place_split(windows, width, height, candidate)
+            if geometry is not None:
+                break
+        if geometry is None:
+            # No valid split exists on this display. Re-establish both
+            # windows at the center and report the unsupported layout.
+            raise WorkspaceLayoutError("Neither window can fit in a split layout")
+        cli = geometry["cli"]
+        divider_percent = round(100 * (cli[0] + cli[2]) / width, 2)
+        clamped = candidate != cli_percent
     else:
-        for kind, xid in windows.items():
-            x, y, w, h = bounds[kind]
+        # Fullscreen modes preserve the other application. Switching back
+        # to Split restores both without restarting Firefox or xterm.
+        for xid in windows.values():
             _command("wmctrl", "-ir", xid, "-e",
-                     f"0,{x},{y},{max(200, w)},{max(250, h)}")
-
-    if mode != "split":
+                     f"0,0,0,{width},{height}")
         _command("wmctrl", "-ia", windows[mode])
-    else:
-        # Restoring ONLY the CLI leaves an iconified Firefox invisible until
-        # a participant changes modes. Raise both windows, then focus CLI.
-        # Bringing up a window through -ia also de-iconifies it in Openbox.
-        _command("wmctrl", "-ia", windows["browser"])
-        _command("wmctrl", "-ia", windows["cli"])
-
-    geometry = current_geometry()
-    if mode == "split":
-        cli = geometry.get("cli")
-        browser = geometry.get("browser")
-        if cli is None or browser is None:
-            raise WorkspaceLayoutError("Window geometry unavailable")
-        right = cli[0] + cli[2]
-        if abs(browser[0] - right) > 35:
-            raise WorkspaceLayoutError("CLI and Firefox are not adjacent")
-        if cli[2] < 280 or browser[2] < 300:
-            raise WorkspaceLayoutError("A pane became too narrow")
-        divider_percent = round(100 * right / width, 2)
-    else:
+        geometry = current_geometry(windows)
         divider_percent = cli_percent
+        clamped = False
 
-    return {"mode": mode, "cli_percent": cli_percent,
+    return {"mode": mode,
+            "cli_percent": cli_percent,
             "divider_percent": divider_percent,
+            "clamped": clamped,
             "width": width, "height": height,
             "windows": geometry,
             "focus": focus()}
