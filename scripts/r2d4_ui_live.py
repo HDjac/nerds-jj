@@ -25,7 +25,7 @@ def command(*args, output=False):
         # restart operations can be diagnosed without another deployment.
         raise RuntimeError(
             "Command failed (" + str(result.returncode) + "): " +
-            " ".join(args[:6]) + "\\n" +
+            " ".join(args[:6]) + "\n" +
             (result.stderr.strip() or result.stdout.strip() or "(no diagnostic output)")
         )
     return result.stdout.strip() if output else None
