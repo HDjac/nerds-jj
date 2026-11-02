@@ -88,6 +88,45 @@ def activate_workspace():
             "error": "Unable to activate workspace"
         }), 500
 
+def _r2d_split_enabled():
+    return (getattr(CONFIG, "PILOT1_MODE", False)
+            and os.environ.get("PILOT1_SPLIT_WORKSPACE_ENABLED", "0") == "1")
+
+
+@app.route("/api/workspace/focus", methods=["GET"])
+def workspace_focus():
+    if not _r2d_split_enabled():
+        abort(404)
+    from workspace_layout import focus
+    response = jsonify({"focus": focus()})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/api/workspace/layout", methods=["POST"])
+def workspace_layout_update():
+    if not _r2d_split_enabled():
+        abort(404)
+    if request.content_length is None or request.content_length > 1024:
+        return jsonify({"error": "Invalid layout request"}), 413
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Invalid layout request"}), 400
+    mode = payload.get("mode")
+    percent = payload.get("cli_percent", 50)
+    if mode not in ("split", "cli", "browser") or type(percent) is not int or not 30 <= percent <= 70:
+        return jsonify({"error": "Invalid layout parameters"}), 400
+    from workspace_layout import set_layout, WorkspaceLayoutError
+    try:
+        result = set_layout(mode, percent)
+    except WorkspaceLayoutError:
+        app.logger.warning("X11 window tiling is unavailable")
+        return jsonify({"error": "Window manager could not arrange the workspace"}), 503
+    response = jsonify(result)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 def send_recv_data(data: dict, endpoint:str="/submit") -> bytes:
     """Send and receive data with authorization information"""
     #Ensure we have the correct data for this user
