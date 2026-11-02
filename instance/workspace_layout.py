@@ -170,13 +170,25 @@ def set_layout(mode, cli_percent=50):
             ("browser" if mode == "cli" else "cli"): (0, 0, width, height),
         }
 
-    # Remove maximized flags before requesting geometry, otherwise some WMs
-    # silently ignore -e. No processes are killed or restarted.
-    for kind, xid in windows.items():
+    # Terminal widths are rounded to character columns by XTerm. Measure the
+    # actual right edge before positioning Firefox to prevent a black gap.
+    for xid in windows.values():
         _command("wmctrl", "-ir", xid, "-b", "remove,maximized_vert,maximized_horz")
-        x, y, w, h = bounds[kind]
-        _command("wmctrl", "-ir", xid, "-e",
-                 f"0,{x},{y},{max(200, w)},{max(250, h)}")
+    if mode == "split":
+        x, y, w, h = bounds["cli"]
+        _command("wmctrl", "-ir", windows["cli"], "-e",
+                 f"0,{x},{y},{max(300, w)},{max(250, h)}")
+        actual = current_geometry().get("cli")
+        if actual is None:
+            raise WorkspaceLayoutError("CLI geometry unavailable")
+        browser_x = max(300, actual[0] + actual[2] + 2)
+        _command("wmctrl", "-ir", windows["browser"], "-e",
+                 f"0,{browser_x},0,{max(300, width - browser_x)},{height}")
+    else:
+        for kind, xid in windows.items():
+            x, y, w, h = bounds[kind]
+            _command("wmctrl", "-ir", xid, "-e",
+                     f"0,{x},{y},{max(200, w)},{max(250, h)}")
 
     if mode != "split":
         _command("wmctrl", "-ia", windows[mode])
@@ -189,19 +201,21 @@ def set_layout(mode, cli_percent=50):
 
     geometry = current_geometry()
     if mode == "split":
-        # Matchbox and other fullscreen window managers may accept wmctrl
-        # commands yet silently remaximize a window. Never report success
-        # without two genuinely separated native windows.
-        for kind, expected in bounds.items():
-            observed = geometry.get(kind)
-            if observed is None:
-                raise WorkspaceLayoutError("Window geometry unavailable")
-            x, y, w, h = observed
-            target_x, _, target_w, _ = expected
-            if abs(x - target_x) > 55 or abs(w - target_w) > 65:
-                raise WorkspaceLayoutError("Window manager does not support split tiling")
+        cli = geometry.get("cli")
+        browser = geometry.get("browser")
+        if cli is None or browser is None:
+            raise WorkspaceLayoutError("Window geometry unavailable")
+        right = cli[0] + cli[2]
+        if abs(browser[0] - right) > 35:
+            raise WorkspaceLayoutError("CLI and Firefox are not adjacent")
+        if cli[2] < 280 or browser[2] < 300:
+            raise WorkspaceLayoutError("A pane became too narrow")
+        divider_percent = round(100 * right / width, 2)
+    else:
+        divider_percent = cli_percent
 
     return {"mode": mode, "cli_percent": cli_percent,
+            "divider_percent": divider_percent,
             "width": width, "height": height,
             "windows": geometry,
             "focus": focus()}
