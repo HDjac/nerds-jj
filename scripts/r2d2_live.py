@@ -46,7 +46,7 @@ def ensure_running():
     assert call("docker", "inspect", "-f", "{{.State.Running}}", LIVE, output=True) == "true"
     sh(f"test -f {API} && test -d {WWW} && test -f {RUN}")
     sh("test -f /home/user/pilot1_task_descriptions.py")
-    sh("command -v xprop >/dev/null && command -v wmctrl >/dev/null")
+    sh("command -v wmctrl >/dev/null")
 
 
 def bundle_name(root):
