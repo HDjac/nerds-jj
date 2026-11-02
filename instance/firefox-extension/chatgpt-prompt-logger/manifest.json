@@ -22,6 +22,16 @@
         "content.js"
       ],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://google.com/*",
+        "https://www.google.com/*"
+      ],
+      "js": [
+        "google-web-ux.js"
+      ],
+      "run_at": "document_start"
     }
   ],
   "background": {
