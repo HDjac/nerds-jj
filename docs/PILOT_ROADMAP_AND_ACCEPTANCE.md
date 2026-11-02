@@ -54,7 +54,9 @@ Legend: **DONE** = implemented and locally demonstrated in its specified scope;
 - `instance/instance-api.py` now returns anonymous `title`/`desc` while preserving the `task_code` for collection and task-transition logic; `instance/Dockerfile` installs the helper.
 - `PilotTaskController.jsx` displays only Task 1/2; `fuzzingGuideData.json` has a dedicated three-harness explanation.
 - Source-level tests: `instance/test_pilot1_task_descriptions.py`; repeatable validation: `bash scripts/r2d1_verify.sh`.
-- **Not yet accepted:** React production build, isolated participant deployment, browser visual/readability review at 1280x720, both randomized task orders, advisor review, and active CLI/font check. Existing Release 2C participant remains untouched.
+- **Live local check:** Release 2D.1 was activated in the existing local participant; Task 2 anonymous heading and harness/corpus guidance were verified. User reported instructions looked good, but identified duplicate assignment/directory text and requested persistent task controls.
+- **Follow-up implemented, live acceptance pending:** Redundant assignment/directory block removed; Finish Task / Skip Task moved to a bottom footer outside the scrolling instruction pane. Reversible frontend-only deployment helper: `scripts/r2d1_sidebar_live.py`.
+- **Remaining acceptance:** Test footer and scroll behavior in live UI, review both randomized task orders and CLI font readability, and obtain advisor review before freezing 2D.1. Do not mark pending work complete from the code change alone.
 
 ## 2D.2 — Resizable split workspace
 
