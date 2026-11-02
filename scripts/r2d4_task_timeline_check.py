@@ -30,6 +30,8 @@ BEGIN TRANSACTION READ ONLY;
 SELECT 'SESSION' AS check_type, s.status, s.order_code,
        s.assigned_at AS assigned_at_utc,
        s.started_at AS stored_started_at_utc,
+       s.intro_acknowledged_at AS intro_acknowledged_utc,
+       s.howto_acknowledged_at AS howto_start_study_utc,
        s.ended_at AS stored_ended_at_utc
 FROM fuzz_pilot.study_sessions s
 WHERE s.instance_id='{iid}';
@@ -63,6 +65,8 @@ COMMIT;
     print("Read-only timeline check complete.")
     print("Important: first_received_* timestamps are ingestion observations,")
     print("NOT guaranteed participant task start times. Do not backfill automatically.")
+    print("Task 1 HowTo acknowledgment is the explicit Start Study action when used.")
+    print("Task 2 release is an operational boundary, not first interaction.")
 
 
 if __name__ == "__main__":
