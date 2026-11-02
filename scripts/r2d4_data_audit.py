@@ -48,7 +48,7 @@ WHERE s.instance_id='{instance_id}'
 ORDER BY t.position;
 
 \\echo ===== ACTIVITY_BY_TASK_AND_SOURCE =====
-SELECT t.position, t.task_code, e.event_source, COUNT(*) AS events,
+SELECT t.position, t.task_code, e.event_source, COUNT(e.event_id) AS events,
        COUNT(DISTINCT e.event_type) AS event_types,
        COUNT(*) FILTER (WHERE e.event_key IS NULL) AS no_event_key
 FROM fuzz_pilot.study_sessions s
@@ -72,7 +72,7 @@ ORDER BY t.position, e.event_type;
 
 \\echo ===== CAMPAIGN_STATUS_AND_HARNESS =====
 SELECT t.position, t.task_code, c.harness_id, c.status,
-       COUNT(*) AS campaigns,
+       COUNT(c.campaign_id) AS campaigns,
        COUNT(*) FILTER (WHERE c.ended_at IS NULL) AS open_campaigns
 FROM fuzz_pilot.study_sessions s
 JOIN fuzz_pilot.task_runs t ON t.session_id=s.session_id
@@ -82,7 +82,7 @@ GROUP BY t.position,t.task_code,c.harness_id,c.status
 ORDER BY t.position,c.harness_id,c.status;
 
 \\echo ===== ARTIFACTS_BY_TASK_AND_KIND =====
-SELECT t.position, a.artifact_kind, COUNT(*) AS artifacts,
+SELECT t.position, a.artifact_kind, COUNT(a.artifact_id) AS artifacts,
        COUNT(*) FILTER (WHERE a.sha256 IS NULL) AS missing_checksum,
        COUNT(*) FILTER (WHERE a.size_bytes IS NULL) AS missing_size
 FROM fuzz_pilot.study_sessions s
