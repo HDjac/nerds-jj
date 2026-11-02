@@ -51,10 +51,10 @@ RUN useradd -m --shell=/usr/bin/nologin user
 # Keep native window title bars for orientation while hiding the minimize and
 # maximize buttons; participant layout is controlled by the NERDs toolbar.
 # Per-application <decor>no</decor> rules previously removed the title bars.
-RUN install -d -o user -g user /home/user/.config/openbox \\
+RUN install -d -o user -g user /home/user/.config/openbox \
     && sed 's#<titleLayout>NLIMC</titleLayout>#<titleLayout>NLC</titleLayout>#' \\
-       /etc/xdg/openbox/rc.xml > /home/user/.config/openbox/rc.xml \\
-    && sed -i 's#</keyboard>#  <keybind key="C-A-S-d"><action name="Decorate"/></keybind>\\n</keyboard>#' /home/user/.config/openbox/rc.xml \
+       /etc/xdg/openbox/rc.xml > /home/user/.config/openbox/rc.xml \
+    && sed -i 's#</keyboard>#  <keybind key="C-A-S-d"><action name="Decorate"/></keybind>\n</keyboard>#' /home/user/.config/openbox/rc.xml \
     && chown user:user /home/user/.config/openbox/rc.xml
 WORKDIR /home/user
 
