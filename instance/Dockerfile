@@ -45,6 +45,13 @@ COPY ./firefox-extension/chatgpt-prompt-logger.xpi /opt/chatgpt-prompt-logger.xp
 COPY ./firefox-policies/policies.json /usr/lib/firefox-esr/distribution/policies.json
 
 RUN useradd -m --shell=/usr/bin/nologin user
+# Prevent participants from minimizing/maximizing the two research desktop
+# windows; the NERDs split/CLI-only/Firefox-only controls handle layout.
+# Keep close available for ordinary Firefox dialog windows.
+RUN install -d -o user -g user /home/user/.config/openbox \
+    && sed 's#<titleLayout>NLIMC</titleLayout>#<titleLayout>NLC</titleLayout>#' \
+       /etc/xdg/openbox/rc.xml > /home/user/.config/openbox/rc.xml \
+    && chown user:user /home/user/.config/openbox/rc.xml
 WORKDIR /home/user
 
 # Setup EMSDK. emcc finds its bundled node via /emsdk/.emscripten, so no
