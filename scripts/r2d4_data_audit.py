@@ -70,7 +70,28 @@ WHERE s.instance_id='{instance_id}'
 GROUP BY t.position,e.event_type
 ORDER BY t.position, e.event_type;
 
-\\echo ===== CAMPAIGN_STATUS_AND_HARNESS =====
+\\echo ===== FUZZER_INVOCATION_COUNTS =====
+SELECT t.position,
+       COUNT(e.event_id) FILTER (
+         WHERE e.event_type='bash_command_completed'
+           AND e.payload->>'command' ~
+             '^[[:space:]]*(\./|/home/user/fuzz-study/work/)fuzz_[abc]([[:space:]]|$)'
+       ) AS observed_fuzzer_commands,
+       COUNT(e.event_id) FILTER (
+         WHERE e.event_type='bash_command_completed'
+           AND e.payload->>'command' ~
+             '^[[:space:]]*(\./|/home/user/fuzz-study/work/)fuzz_[abc]([[:space:]]|$)'
+           AND e.payload->>'command' ~ '-runs=[0-9]+'
+       ) AS bounded_fuzzer_commands
+FROM fuzz_pilot.study_sessions s
+JOIN fuzz_pilot.task_runs t ON t.session_id=s.session_id
+LEFT JOIN fuzz_pilot.events e
+ ON e.task_run_id=t.task_run_id AND e.event_source='cli'
+WHERE s.instance_id='{instance_id}'
+GROUP BY t.position
+ORDER BY t.position;
+
+\echo ===== CAMPAIGN_STATUS_AND_HARNESS =====
 SELECT t.position, t.task_code, c.harness_id, c.status,
        COUNT(c.campaign_id) AS campaigns,
        COUNT(c.campaign_id) FILTER (WHERE c.ended_at IS NULL) AS open_campaigns
@@ -183,6 +204,8 @@ COMMIT;
     print("Zero 'wrong_session_or_missing_task' and 'excluded_text_records'")
     print("are expected. This does not prove artifact ZIP files still exist;")
     print("archive hashes and individual campaign transcripts are a later check.")
+    print("Fuzzer invocation counts are derived from recorded Bash commands;")
+    print("a command does not itself prove a completed LibFuzzer campaign.")
 
 
 if __name__ == "__main__":
