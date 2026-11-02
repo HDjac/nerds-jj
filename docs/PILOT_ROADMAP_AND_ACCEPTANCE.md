@@ -77,6 +77,8 @@ Legend: **DONE** = implemented and locally demonstrated in its specified scope;
 
 **Additional 2D.2 acceptance feedback:** The user confirmed the single Firefox workflow and split view are working, but dragging either application below its supported width produced a 503. The layout helper now measures the **pinned** Firefox window and steps extreme divider requests toward a supported 50/50 layout instead of treating normal window minimum sizes as an API failure. The response contains the actual `divider_percent` for the existing React drag handle and a `clamped` indicator. A backend-only live deployment/rollback helper is `scripts/r2d2_clamp_live.py`; test both ends of the divider directly in the current participant before marking this item accepted.
 
+**Resolution and Firefox scaling preference (2026-11-02):** The user validated a live 1920x1080 VNC resolution. New participant displays now default to `1920x1080` in `instance/services/vnc/run`. Firefox interface scaling should remain **automatic** (`layout.css.devPixelsPerPx=-1.0`, its normal default), not forced to 0.85 across users. An earlier manual 0.85 local profile change can be restored to automatic in Firefox's `about:config`; changing the default source does not alter running Firefox preferences or restart VNC. Continue testing resizable split workspace and actual X11 focus/clipboard attribution in the existing local participant before marking 2D.2 accepted.
+
 **Gate:** Continuous CLI + Firefox usability, reproducible task transitions, correct source/destination metadata, host clipboard isolation.
 
 ## 2D.3 — Conventional Google Search and browser reliability
