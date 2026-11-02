@@ -181,6 +181,10 @@ def set_layout(mode, cli_percent=50):
     if mode != "split":
         _command("wmctrl", "-ia", windows[mode])
     else:
+        # Restoring ONLY the CLI leaves an iconified Firefox invisible until
+        # a participant changes modes. Raise both windows, then focus CLI.
+        # Bringing up a window through -ia also de-iconifies it in Openbox.
+        _command("wmctrl", "-ia", windows["browser"])
         _command("wmctrl", "-ia", windows["cli"])
 
     geometry = current_geometry()
