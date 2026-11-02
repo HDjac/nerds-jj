@@ -27,18 +27,51 @@ def _command(*argv):
         raise WorkspaceLayoutError("Remote desktop window operation unavailable") from exc
 
 
-def _windows():
-    windows = {}
-    for line in _command("wmctrl", "-lx").splitlines():
-        cols = line.split(None, 4)
-        if len(cols) < 3:
+# Pin the participant's Firefox X11 window for this API lifetime. wmctrl's
+# ordering can change with stacking: choosing the last match on every call
+# silently flips between independently-open Firefox windows.
+_PRIMARY_FIREFOX_ID = None
+
+
+def _entries():
+    entries = []
+    for line in _command("wmctrl", "-lGx").splitlines():
+        cols = line.split(None, 8)
+        if len(cols) < 7:
             continue
-        cls = cols[2].lower()
+        cls = cols[6].lower()
         if cls == "xterm.xterm":
-            windows["cli"] = cols[0]
+            kind = "cli"
         elif cls.endswith(".firefox-esr"):
-            windows["browser"] = cols[0]
-    return windows
+            kind = "browser"
+        else:
+            continue
+        entries.append({"kind": kind, "id": cols[0],
+                        "title": cols[8] if len(cols) > 8 else ""})
+    return entries
+
+
+def _windows():
+    global _PRIMARY_FIREFOX_ID
+    entries = _entries()
+    cli = [e for e in entries if e["kind"] == "cli"]
+    browsers = [e for e in entries if e["kind"] == "browser"]
+    if not cli or not browsers:
+        return {}
+    by_id = {e["id"] for e in browsers}
+    if _PRIMARY_FIREFOX_ID not in by_id:
+        # Prefer the currently used Firefox window, then an existing tab
+        # with a page title over a blank/new-tab window. Never close another
+        # Firefox window or erase its profile/history.
+        focused = _focused_window_chain()
+        active = next((e for e in browsers
+                       if int(e["id"], 16) in focused), None)
+        meaningful = [e for e in browsers
+                      if e["title"].strip() and
+                      not e["title"].lower().startswith(("new tab", "mozilla firefox"))]
+        selected = active or (meaningful[0] if meaningful else browsers[0])
+        _PRIMARY_FIREFOX_ID = selected["id"]
+    return {"cli": cli[0]["id"], "browser": _PRIMARY_FIREFOX_ID}
 
 
 def _focused_window_chain():
@@ -99,22 +132,29 @@ def _focused_window_chain():
 
 
 def focus():
-    """Return focused X11 application or 'unknown'; never guess by UI tab."""
-    windows = _windows()
-    by_id = {int(xid, 16): kind for kind, xid in windows.items()}
+    """Actual focused X11 application, including other Firefox windows.
+
+    Clipboard provenance must never infer the focused app from the selected
+    primary Firefox window alone. Preserve 'unknown' on ambiguous focus.
+    """
+    entries = _entries()
     try:
         active = _command("xprop", "-root", "_NET_ACTIVE_WINDOW")
-        match = re.search(r"window id # (0x[0-9a-fA-F]+)", active)
-        if match:
-            result = by_id.get(int(match.group(1), 16))
-            if result:
-                return result
+        m = re.search(r"(0x[0-9a-fA-F]+)", active)
+        if m:
+            xid = int(m.group(1), 16)
+            for e in entries:
+                if int(e["id"], 16) == xid:
+                    return e["kind"]
     except (ValueError, WorkspaceLayoutError):
         pass
-    for xid in _focused_window_chain():
-        if xid in by_id:
-            return by_id[xid]
+    focused = _focused_window_chain()
+    for xid in focused:
+        for e in entries:
+            if xid == int(e["id"], 16):
+                return e["kind"]
     return "unknown"
+
 
 def screen_size():
     desktop = _command("wmctrl", "-d")
