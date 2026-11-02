@@ -6,44 +6,125 @@
       "heading": "Before you begin",
       "summary": "Read the task description first. Work only in the assigned task workspace. A harness is a small program that supplies inputs to the target; a corpus is a saved collection of test inputs.",
       "steps": [
-        {"action": "Open the assigned workspace", "command": "cd ~/fuzz-study/work", "detail": "This is your editable workspace. Each task has its own copy of the source files."},
-        {"action": "Explore the project", "command": "ls", "detail": "Look at the Makefile, harnesses/, src/, and include/ before choosing a fuzzing target."},
-        {"action": "Build the available harnesses", "command": "make CC=/usr/bin/clang-19", "detail": "Builds the targets with the installed Clang 19 compiler and its libFuzzer/AddressSanitizer libraries. If the build fails, read the terminal error before making changes."}
+        {
+          "action": "Open the assigned workspace",
+          "command": "cd ~/fuzz-study/work",
+          "detail": "This is your editable workspace. Each task has its own copy of the source files."
+        },
+        {
+          "action": "Explore the project",
+          "command": "ls",
+          "detail": "Look at the Makefile, harnesses/, src/, and include/ before choosing a fuzzing target."
+        },
+        {
+          "action": "Build the available harnesses",
+          "command": "make CC=/usr/bin/clang-19",
+          "detail": "Builds the targets with the installed Clang 19 compiler and its libFuzzer/AddressSanitizer libraries. If the build fails, read the terminal error before making changes."
+        }
+      ]
+    },
+    {
+      "heading": "Understand and choose a harness",
+      "summary": "This task provides three executable harnesses: fuzz_a, fuzz_b, and fuzz_c. Each is compiled from its matching source file under harnesses/ and supplies inputs through a particular entry point. Examine their source to understand what they exercise; no harness is prescribed as the correct choice.",
+      "steps": [
+        {
+          "action": "Inspect fuzz_a",
+          "command": "cat harnesses/harness_a.c",
+          "detail": "Read how this harness passes generated inputs to the program. The fuzz_a executable is built from this file."
+        },
+        {
+          "action": "Inspect fuzz_b",
+          "command": "cat harnesses/harness_b.c",
+          "detail": "Compare how this harness constructs or transforms the inputs it passes to the program. The fuzz_b executable is built from this file."
+        },
+        {
+          "action": "Inspect fuzz_c",
+          "command": "cat harnesses/harness_c.c",
+          "detail": "Inspect the input path and function calls made by this harness. The fuzz_c executable is built from this file."
+        }
       ]
     },
     {
       "heading": "Start fuzzing",
-      "summary": "Choose the harness you want to investigate. The commands below use fuzz_a as an example; fuzz_b and fuzz_c may also be available.",
+      "summary": "Choose a harness after examining the three harness source files. The commands below demonstrate fuzz_a only; replace the executable and corpus directory when using fuzz_b or fuzz_c.",
       "steps": [
-        {"action": "Create a persistent input corpus", "command": "mkdir -p ../runs/corpus-a", "detail": "Keeping the corpus in ../runs lets you reuse its inputs instead of starting from scratch each time."},
-        {"action": "Run a short campaign", "command": "./fuzz_a ../runs/corpus-a -max_total_time=120", "detail": "Runs libFuzzer for up to two minutes. Watch the output for runs, coverage, newly discovered inputs, and sanitizer errors. The collector records campaign activity."},
-        {"action": "Optional quick check", "command": "./fuzz_a -runs=100", "detail": "Runs at most 100 executions when you want a quick sanity check without a longer timed campaign."}
+        {
+          "action": "Create a persistent input corpus",
+          "command": "mkdir -p ../runs/corpus-a",
+          "detail": "Keeping the corpus in ../runs lets you reuse its inputs instead of starting from scratch each time."
+        },
+        {
+          "action": "Run a short campaign",
+          "command": "./fuzz_a ../runs/corpus-a -max_total_time=120",
+          "detail": "Runs libFuzzer for up to two minutes. Watch the output for runs, coverage, newly discovered inputs, and sanitizer errors. The collector records campaign activity."
+        },
+        {
+          "action": "Optional quick check",
+          "command": "./fuzz_a -runs=100",
+          "detail": "Runs at most 100 executions when you want a quick sanity check without a longer timed campaign."
+        }
       ]
     },
     {
       "heading": "Stop and continue",
       "summary": "You may stop a campaign and come back to the same harness. Keep your saved corpus between runs.",
       "steps": [
-        {"action": "Stop an active campaign", "command": "Ctrl+C", "detail": "Click the CLI terminal and press Control+C. Wait for the program to return to the shell prompt; do not close or kill the container."},
-        {"action": "Continue using saved inputs", "command": "./fuzz_a ../runs/corpus-a -max_total_time=120", "detail": "Using the same corpus directory starts another campaign seeded with the inputs already collected. The two-minute limit applies to this new run."},
-        {"action": "Try a different harness", "command": "./fuzz_b ../runs/corpus-b -max_total_time=120", "detail": "Create ../runs/corpus-b first with mkdir -p; keep the corpora separate for clarity."}
+        {
+          "action": "Stop an active campaign",
+          "command": "Ctrl+C",
+          "detail": "Click the CLI terminal and press Control+C. Wait for the program to return to the shell prompt; do not close or kill the container."
+        },
+        {
+          "action": "Continue using saved inputs",
+          "command": "./fuzz_a ../runs/corpus-a -max_total_time=120",
+          "detail": "Using the same corpus directory starts another campaign seeded with the inputs already collected. The two-minute limit applies to this new run."
+        },
+        {
+          "action": "Try a different harness",
+          "command": "./fuzz_b ../runs/corpus-b -max_total_time=120",
+          "detail": "Create ../runs/corpus-b first with mkdir -p; keep the corpora separate for clarity."
+        }
       ]
     },
     {
       "heading": "Investigate outcomes",
       "summary": "Use the terminal output and source files to decide what to try next; not every campaign will discover a crash.",
       "steps": [
-        {"action": "Review saved runs", "command": "ls ../runs", "detail": "Inspect corpora and other files you have saved during this task."},
-        {"action": "Review the current harness source", "command": "ls harnesses", "detail": "You may inspect and modify your task's editable files. Rebuild after source changes."},
-        {"action": "If a crash occurs", "command": "ls crash-*", "detail": "The fuzzer may save a crashing input in the current directory; preserve it and the terminal output. If there is no crash file, this command may report no match."}
+        {
+          "action": "Review saved runs",
+          "command": "ls ../runs",
+          "detail": "Inspect corpora and other files you have saved during this task."
+        },
+        {
+          "action": "Review the current harness source",
+          "command": "ls harnesses",
+          "detail": "You may inspect and modify your task's editable files. Rebuild after source changes."
+        },
+        {
+          "action": "If a crash occurs",
+          "command": "ls crash-*",
+          "detail": "The fuzzer may save a crashing input in the current directory; preserve it and the terminal output. If there is no crash file, this command may report no match."
+        }
       ]
     }
   ],
   "terms": [
-    {"term": "Harness", "definition": "Code that feeds test inputs to the program or function being fuzzed."},
-    {"term": "Corpus", "definition": "Inputs reused as seeds for future fuzzing runs."},
-    {"term": "Coverage", "definition": "A measure of the code paths or execution edges exercised by inputs."},
-    {"term": "Crash artifact", "definition": "An input saved after a failure; keep it for examination and reproduction."}
+    {
+      "term": "Harness",
+      "definition": "Code that feeds test inputs to the program or function being fuzzed."
+    },
+    {
+      "term": "Corpus",
+      "definition": "A directory of saved test inputs (seeds) that libFuzzer can mutate and reuse between runs. Keep separate corpora for different harnesses."
+    },
+    {
+      "term": "Coverage",
+      "definition": "A measure of the code paths or execution edges exercised by inputs."
+    },
+    {
+      "term": "Crash artifact",
+      "definition": "An input saved after a failure; keep it for examination and reproduction."
+    }
   ],
   "notes": [
     "Use only the internal CLI and BROWSER tabs for study work. If you need AI or web search, open it inside the NERDs Browser so the study can capture relevant interactions.",
