@@ -42,6 +42,16 @@ BEGIN TRANSACTION READ ONLY;
 SELECT COALESCE(json_agg(row_to_json(q)), '[]'::json)::text
 FROM (
  SELECT s.session_id::text, t.task_run_id::text, t.position, t.status,
+        CASE WHEN t.position = 2 THEN (
+          SELECT to_char(release.received_at AT TIME ZONE 'UTC',
+                 'YYYYMMDD"T"HH24MISS"Z"')
+          FROM fuzz_pilot.events release
+          WHERE release.session_id=s.session_id
+            AND release.task_run_id=t.task_run_id
+            AND release.event_type='task_released'
+            AND release.event_key='lifecycle:2:released'
+          ORDER BY release.event_id LIMIT 1
+        ) ELSE NULL END AS release_tag_floor,
         e.event_key, e.payload->>'source_sha256' AS source_sha256,
         e.payload->>'source_file' AS source_file,
         e.payload->>'source_line' AS source_line,
@@ -140,6 +150,13 @@ def main():
             raise RuntimeError("Unexpected task position")
         tasks[position].append(row)
 
+    # Compare any Task 2 archival copies from pre-release terminal sessions
+    # to the actual Task 1 DB records before treating them as safely excluded.
+    first_task_db = {
+        row["event_key"]: row
+        for row in tasks.get(1, [])
+        if row.get("event_key") is not None
+    }
     grand = defaultdict(int)
     print("READ-ONLY CLI COMMAND/ARCHIVE RECONCILIATION")
     print("No command text, transcripts, session IDs or hashes are shown.")
@@ -165,12 +182,39 @@ def main():
             continue
 
         db_commands = {e["event_key"]: e for e in entries if e["event_key"] is not None}
-        db_keys, archive_keys = set(db_commands), set(archived)
+        # Match the *trusted release boundary* used by pilot1_auto_ingest.py,
+        # not the presence of all files copied from the shared terminal
+        # recording directory into this task's archive.
+        excluded = {}
+        eligible = archived
+        matched_prior_task = 0
+        unmatched_prior_task = 0
+        excluded_db_entries = 0
+        release_floor = first.get("release_tag_floor")
+        if position == 2:
+            if not isinstance(release_floor, str) or not re.fullmatch(
+                    r"20[0-9]{6}T[0-9]{6}Z", release_floor):
+                raise RuntimeError("Task 2 has no verified DB release boundary")
+            excluded = {
+                key: event for key, event in archived.items()
+                if event["payload"]["terminal_session"].split("-", 1)[0] < release_floor
+            }
+            eligible = {key: event for key, event in archived.items()
+                        if key not in excluded}
+            for key, event in excluded.items():
+                prior = first_task_db.get(key)
+                if prior is not None and prior.get("source_sha256") == (
+                        event["payload"]["source_sha256"]):
+                    matched_prior_task += 1
+                else:
+                    unmatched_prior_task += 1
+            excluded_db_entries = len(set(db_commands) & set(excluded))
+        db_keys, archive_keys = set(db_commands), set(eligible)
         common = db_keys & archive_keys
         mismatches = 0
         for key in common:
             db = db_commands[key]
-            item = archived[key]
+            item = eligible[key]
             p = item["payload"]
             expected = {
                 "source_sha256": p["source_sha256"],
@@ -186,12 +230,22 @@ def main():
         missing_db = len(archive_keys - db_keys)
         missing_archive = len(db_keys - archive_keys)
         print(f"Task {position} ({first['status']}):")
-        print(f"  DB commands: {len(db_keys)}; archived complete commands: {len(archive_keys)}")
+        print(f"  DB commands: {len(db_keys)}; archived complete commands: {len(archived)}")
+        if position == 2:
+            print(f"  Archive commands before Task 2 release (excluded): {len(excluded)}")
+            print(f"  Pre-release copies matching Task 1 DB and SHA256: {matched_prior_task}")
+            print(f"  Unmatched pre-release copies (review): {unmatched_prior_task}")
+            print(f"  Pre-release commands wrongly in Task 2 DB (review): {excluded_db_entries}")
+            print(f"  Commands eligible for Task 2 ingestion: {len(eligible)}")
         print(f"  Matches: {len(common)-mismatches}; metadata/hash mismatches: {mismatches}")
-        print(f"  Archived not yet in DB: {missing_db}; DB without archive: {missing_archive}")
+        print(f"  Eligible archive commands not yet in DB: {missing_db}; DB without eligible archive: {missing_archive}")
         print(f"  Terminal sessions: {tags}; missing output archives: {missing_out}; missing timing archives: {missing_timing}")
         print(f"  Incomplete trailing JSONL lines: {incomplete}")
         for field, value in (
+            ("excluded_pre_release", len(excluded)),
+            ("verified_prior_task_copies", matched_prior_task),
+            ("unmatched_prior_task", unmatched_prior_task),
+            ("wrongly_task2_db", excluded_db_entries),
             ("matched", len(common)-mismatches),
             ("mismatched", mismatches),
             ("not_in_db", missing_db),
@@ -203,6 +257,7 @@ def main():
             grand[field] += value
     print("SUMMARY:", ", ".join(f"{k}={v}" for k, v in sorted(grand.items())))
     if (grand["archive_errors"] or grand["mismatched"] or
+            grand["unmatched_prior_task"] or grand["wrongly_task2_db"] or
             grand["not_in_archive"] or grand["missing_out"] or grand["missing_timing"]):
         print("REVIEW REQUIRED: archived/ingested command evidence is incomplete or inconsistent.")
         return 1
@@ -210,6 +265,7 @@ def main():
         print("PENDING: some archived entries may still be awaiting collector ingestion.")
     else:
         print("PASS: archived complete Bash commands match stored DB events.")
+    print("The Task 2 filter uses the same trusted release-tag floor as the host importer.")
     print("Scope: structured Bash commands only; unrelated shell subprocesses may not be logged.")
     return 0
 
