@@ -254,6 +254,17 @@ def build_campaigns(archive, tag, task_id):
 
 
 def apply_campaign(summary, instance, session, task):
+    status = summary.get("status")
+    if status not in ("completed", "stopped"):
+        raise ValueError("Only verified completed/stopped campaigns supported")
+    if status == "stopped" and (
+            summary.get("config", {}).get("outcome_evidence") != "libfuzzer_explicit_interrupt" or
+            summary.get("config", {}).get("command_exit_status") != 72 or
+            summary.get("final_metrics", {}).get("is_final_fuzzer_metric") is not False):
+        raise ValueError("Stopped campaign lacks verified interruption metadata")
+    event_type = ("libfuzzer_campaign_stopped" if status == "stopped"
+                  else "libfuzzer_campaign_finished")
+    metric_key = "observed_metrics" if status == "stopped" else "final_metrics"
     row = base64.b64encode(json.dumps(summary, separators=(",", ":"),
                                       ensure_ascii=True).encode()).decode("ascii")
     sql = f"""BEGIN;
@@ -287,10 +298,10 @@ created AS (
  (session_id, task_run_id, campaign_id, event_type, event_source,
   occurred_at, event_key, payload)
  SELECT '{session}'::uuid, '{task}'::uuid, (j->>'campaign_id')::uuid,
-        'libfuzzer_campaign_finished', 'cli',
+        '{event_type}', 'cli',
         (j->>'ended_at')::timestamptz, j->>'event_key',
         jsonb_build_object('harness_id', j->>'harness_id',
-             'final_metrics', j->'final_metrics',
+             '{metric_key}', j->'final_metrics',
              'terminal_session', j->'config'->>'terminal_session',
              'capture_method', j->'config'->>'capture_method')
  FROM d WHERE true ON CONFLICT (session_id, event_key) DO NOTHING RETURNING event_id

@@ -44,6 +44,7 @@ FUZZ_COMMAND = re.compile(r"^\s*(?:\./|/home/user/fuzz-study/work/)fuzz_([abc])(
 CRASH_REFERENCE = re.compile(rb"Test unit written to (?:\./)?(crash-[a-f0-9]{40})(?=\s|\r|\n|$)")
 ASAN_HEADER = re.compile(rb"ERROR: AddressSanitizer:\s+([a-z0-9_-]+)")
 ASAN_SUMMARY = re.compile(rb"SUMMARY: AddressSanitizer:\s+([a-z0-9_-]+)")
+STOP_MARKER = re.compile(rb"libFuzzer: run interrupted; exiting")
 REQUIRED_COLLECTOR_SUFFIX = ".commands.jsonl"
 
 
@@ -249,7 +250,10 @@ def read_campaigns(archive, tag, task):
             break
         done = [m for m in metrics if m.group("kind") == b"DONE"]
         errors = list(ASAN_HEADER.finditer(segment))
-        if len(done) > 1 or len(errors) > 1:
+        interruptions = list(STOP_MARKER.finditer(segment))
+        # Contradictory or repeated outcome markers must not be classified.
+        if (len(done) > 1 or len(errors) > 1 or len(interruptions) > 1 or
+                (interruptions and (done or errors))):
             deferred.append(f"{tag}: sequence {entry['sequence']}: ambiguous outcomes; manual review")
             break
         outcome = None
@@ -346,6 +350,65 @@ def read_campaigns(archive, tag, task):
                 "final_metrics": final,
             }
             prev_outcome_end = start + errors[0].start() + summary.end()
+        elif interruptions and not done and not errors:
+            # A nonzero exit is never sufficient. Require LibFuzzer's own
+            # explicit interrupt message AND its observed exit code (72).
+            if entry["exit_status"] != 72:
+                deferred.append(f"{tag}: sequence {entry['sequence']}: interrupt marker with "
+                                "unexpected exit status; manual review")
+                break
+            # Guard against other failure signatures in the same invocation.
+            # Preserve raw output; never infer a stopped campaign from a crash.
+            if (ASAN_SUMMARY.search(segment) or CRASH_REFERENCE.search(segment) or
+                    re.search(rb"(?:ERROR|SUMMARY):\s*libFuzzer:", segment) or
+                    re.search(rb"(?:ERROR|SUMMARY):\s*(?:UndefinedBehaviorSanitizer|MemorySanitizer):", segment)):
+                deferred.append(f"{tag}: sequence {entry['sequence']}: interrupt "
+                                "conflicts with a failure marker; manual review")
+                break
+            first = metrics[0]
+            before_interrupt = [m for m in metrics
+                                if m.start() < interruptions[0].start()]
+            if not before_interrupt:
+                deferred.append(f"{tag}: sequence {entry['sequence']}: "
+                                "no metric before interruption; manual review")
+                break
+            last = before_interrupt[-1]  # Last *observed* metric, not final.
+            initial_metrics = completed_importer.parse_metrics(first.group("details"))
+            initial_metrics["executions"] = int(first.group("runs"))
+            observed = completed_importer.parse_metrics(last.group("details"))
+            observed["executions"] = int(last.group("runs"))
+            observed["observation_kind"] = last.group("kind").decode("ascii")
+            observed["is_final_fuzzer_metric"] = False
+            if observed["executions"] < initial_metrics["executions"]:
+                raise ValueError("Decreasing LibFuzzer executions before interruption")
+            bounded = re.search(r"(?:^|\s)-runs=(\d+)(?=\s|$)", entry["command"])
+            if bounded and observed["executions"] > int(bounded.group(1)):
+                raise ValueError("Observed executions exceed requested -runs limit")
+            outcome = {
+                "kind": "stopped", "status": "stopped", "harness_id": harness,
+                "command_summary": entry["command"],
+                "started_at": started.isoformat(), "ended_at": ended.isoformat(),
+                "config": {
+                    "requested_runs": int(bounded.group(1)) if bounded else None,
+                    "initial_metrics": initial_metrics,
+                    "terminal_session": tag, "recording_file": tag + ".out",
+                    "command_sequence": entry["sequence"],
+                    "capture_method": "bash_command_and_script_output_timing",
+                    "started_at_estimate": "first_INITED_output_from_script_timing",
+                    "ended_at_estimate": "bash_command_completed_at_prompt",
+                    "outcome_evidence": "libfuzzer_explicit_interrupt",
+                    "command_exit_status": 72,
+                    "interruption_marker_sha256": hashlib.sha256(
+                        interruptions[0].group(0)).hexdigest(),
+                    "observed_fuzzer_excerpt_sha256": hashlib.sha256(
+                        first.group(0) + b"\n" + last.group(0) + b"\n" +
+                        interruptions[0].group(0)).hexdigest(),
+                },
+                # Schema's final_metrics column stores a last observation here;
+                # flag explicitly states this is NOT a final LibFuzzer metric.
+                "final_metrics": observed,
+            }
+            prev_outcome_end = start + interruptions[0].end()
         else:
             deferred.append(f"{tag}: sequence {entry['sequence']}: no verified DONE/ASan outcome "
                             f"(exit={entry['exit_status']}); not imported")
@@ -395,7 +458,7 @@ def import_campaign(candidate, container, instance, session, task, root, apply):
     if not apply:
         return "dry-run"
     summary = {key: value for key, value in candidate.items() if key not in ("kind", "artifact")}
-    if candidate["kind"] == "completed":
+    if candidate["kind"] in ("completed", "stopped"):
         completed_importer.apply_campaign(summary, instance, session, task)
         return "imported"
     if candidate["kind"] == "crash":

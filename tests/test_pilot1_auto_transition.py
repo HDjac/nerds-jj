@@ -49,7 +49,7 @@ class AutoHandoffTests(unittest.TestCase):
         self.assertEqual(m.check_once(True),'advanced')
         args=run.call_args.args[0]
         self.assertIn('pilot1_lifecycle.py',' '.join(args))
-        self.assertEqual(args[-5:],['--action','advance','--outcome','completed','--apply'])
+        self.assertEqual(args[-7:],['--action','advance','--outcome','completed','--collector-launcher','popen','--apply'])
     @patch.object(m,'container_identity')
     @patch.object(m,'assignment',return_value=ROWS)
     @patch.object(m,'marker_from_container',return_value=MARKER)
