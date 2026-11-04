@@ -25,6 +25,7 @@ import sys
 import tarfile
 import time
 from uuid import UUID
+from pilot1_image_trust import image_is_approved
 
 # Explicit per-session context required by the supervisor. Legacy defaults only
 # preserve compatibility with the already completed Pilot 1 operator commands.
@@ -89,6 +90,10 @@ WHERE s.session_id='{SESSION}'::uuid ORDER BY t.position;
 def container_identity():
     data=json.loads(run(['docker','inspect',CONTAINER]))[0]
     if (not data['State']['Running'] or data['Id'][:12]!=INSTANCE or
+        data['Name']!='/'+CONTAINER or
+        data['Config'].get('User')!='user' or
+        data['HostConfig'].get('Privileged',False) or
+        not image_is_approved(data,CONTAINER) or
         data['Config'].get('Labels',{}).get('nerds.study')!='pilot1' or
         'devob_instances' not in data['NetworkSettings']['Networks']):
         raise RuntimeError('Unexpected participant container identity')

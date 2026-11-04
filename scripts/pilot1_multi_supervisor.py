@@ -25,6 +25,7 @@ import subprocess
 import sys
 import time
 from uuid import UUID
+from pilot1_image_trust import image_is_approved
 
 ROOT = Path.home() / 'nerds-pilot-runtime' / 'supervisor'
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -123,6 +124,9 @@ def validate_docker(a):
     item=items[0]
     if (not item['State']['Running'] or item['Id'][:12]!=a.instance or
         item['Name']!='/'+a.container or
+        item['Config'].get('User')!='user' or
+        item['HostConfig'].get('Privileged',False) or
+        not image_is_approved(item,a.container) or
         item['Config'].get('Labels',{}).get('nerds.study')!='pilot1' or
         'devob_instances' not in item['NetworkSettings']['Networks']):
         raise RuntimeError('Assigned Docker identity/label/network mismatch')

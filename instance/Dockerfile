@@ -1,7 +1,7 @@
 FROM node AS build
-ARG REACT_APP_NERDS_CLIPBOARD_INGEST=0
+ARG REACT_APP_NERDS_CLIPBOARD_INGEST=1
 ARG REACT_APP_NERDS_CLIPBOARD_TEXT=0
-ARG REACT_APP_NERDS_SPLIT_WORKSPACE=0
+ARG REACT_APP_NERDS_SPLIT_WORKSPACE=1
 ENV REACT_APP_NERDS_CLIPBOARD_INGEST=${REACT_APP_NERDS_CLIPBOARD_INGEST}
 ENV REACT_APP_NERDS_CLIPBOARD_TEXT=${REACT_APP_NERDS_CLIPBOARD_TEXT}
 ENV REACT_APP_NERDS_SPLIT_WORKSPACE=${REACT_APP_NERDS_SPLIT_WORKSPACE}
@@ -52,10 +52,10 @@ RUN useradd -m --shell=/usr/bin/nologin user
 # maximize buttons; participant layout is controlled by the NERDs toolbar.
 # Per-application <decor>no</decor> rules previously removed the title bars.
 RUN install -d -o user -g user /home/user/.config/openbox \
-    && sed 's#<titleLayout>NLIMC</titleLayout>#<titleLayout>NLC</titleLayout>#' \\
+    && sed 's#<titleLayout>NLIMC</titleLayout>#<titleLayout>NLC</titleLayout>#' \
        /etc/xdg/openbox/rc.xml > /home/user/.config/openbox/rc.xml \
     && sed -i 's#</keyboard>#  <keybind key="C-A-S-d"><action name="Decorate"/></keybind>\n</keyboard>#' /home/user/.config/openbox/rc.xml \
-    && chown user:user /home/user/.config/openbox/rc.xml
+    && chown user:user /home/user/.config/openbox/rc.xml /home/user/.config
 WORKDIR /home/user
 
 # Setup EMSDK. emcc finds its bundled node via /emsdk/.emscripten, so no

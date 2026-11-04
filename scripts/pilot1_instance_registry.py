@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+from pilot1_image_trust import LEGACY_TAG, image_is_approved
 
 NETWORK = os.environ.get(
     "NERDS_PARTICIPANT_NETWORK", "devob_instances"
@@ -13,6 +14,8 @@ NETWORK = os.environ.get(
 IMAGE = os.environ.get(
     "NERDS_PILOT_IMAGE", "devob_instance:cli-pilot-protected"
 )
+if IMAGE != LEGACY_TAG:
+    raise RuntimeError("Global image overrides are disabled; use pinned-image trust")
 
 
 def command(args):
@@ -102,7 +105,7 @@ def discover():
         if container["Id"][:12] != expected_id:
             continue
 
-        if config["Image"] != IMAGE:
+        if not image_is_approved(container, name):
             continue
 
         if config["User"] != "user":

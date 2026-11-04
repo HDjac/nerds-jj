@@ -14,11 +14,11 @@ import re
 import secrets
 import subprocess
 import sys
+from pilot1_image_trust import image_is_approved
 from urllib.parse import urlsplit
 
 DB_CONTAINER = "devob-db-1"
 DB_NAME = "notebook"
-INSTANCE_IMAGE = "devob_instance:cli-pilot-protected"
 PID_RE = re.compile(r"[0-9a-f]{24}\Z")
 I_ID_RE = re.compile(r"[0-9a-f]{12}\Z")
 
@@ -67,7 +67,7 @@ def read_target(pid):
         raise RuntimeError("Participant is not ready for a Pilot 1 invitation")
     obj = json.loads(run(["docker", "inspect", name]))[0]
     if (not obj["State"]["Running"] or obj["Id"][:12] != iid
-            or obj["Config"]["Image"] != INSTANCE_IMAGE
+            or not image_is_approved(obj, name)
             or obj["Config"].get("User") != "user"
             or obj["Config"].get("Labels", {}).get("nerds.study") != "pilot1"
             or "devob_instances" not in obj["NetworkSettings"]["Networks"]):

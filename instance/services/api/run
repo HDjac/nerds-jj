@@ -1,3 +1,13 @@
 #!/bin/sh
+set -eu
+
+# R2D: enable the validated single-desktop split workspace.
+export PILOT1_SPLIT_WORKSPACE_ENABLED=1
+
+# Enable task-scoped clipboard metadata.
+export PILOT1_CLIPBOARD_INGEST_ENABLED=1
+
+# Privacy baseline: text capture requires a separate approved build.
+export PILOT1_CLIPBOARD_TEXT_ENABLED=0
 
 exec python3 /home/user/instance-api.py

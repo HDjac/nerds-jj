@@ -10,6 +10,7 @@ import json
 import re
 import subprocess
 import sys
+from pilot1_image_trust import image_is_approved
 from dataclasses import dataclass
 
 DB_CONTAINER = "devob-db-1"
@@ -84,7 +85,7 @@ def inspect_container(name):
     item = data[0]
     if not item["State"]["Running"]:
         raise RuntimeError("Container is not running")
-    if item["Config"]["Image"] != "devob_instance:cli-pilot-protected":
+    if not image_is_approved(item, name):
         raise RuntimeError("Container was not created from the protected Pilot 1 image")
     if item["Config"]["User"] != "user":
         raise RuntimeError("Container is not configured as the unprivileged user")
