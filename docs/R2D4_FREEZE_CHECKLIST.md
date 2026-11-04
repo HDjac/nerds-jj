@@ -100,21 +100,23 @@ Operator ran the checklist's read-only WSL inventory:
 
 ### Suggested offline regression run (pending operator result)
 
-Source inspection confirmed the **seven** tests below are unit/mock/synthetic tests, not live Docker/DB mutation scripts; use the **explicit module names**, not repository-wide discovery, to avoid running older `test/test-instance.py` or enrollment scripts. `test_r2c_clipboard_policy.py` defaults to a different checkout unless `NERDS_REPO` is set. `PYTHONPATH` also ensures sibling module imports in tests resolve from the accepted checkout.
+Source inspection confirmed the **seven** tests below are unit/mock/synthetic tests, not live Docker/DB mutation scripts; use these **restricted filename patterns**, not repository-wide discovery, to avoid running older `test/test-instance.py` or enrollment scripts. `test_r2c_clipboard_policy.py` defaults to a different checkout unless `NERDS_REPO` is set. `PYTHONPATH` also ensures sibling module imports in tests resolve from the accepted checkout.
 
 ```bash
 cd ~/nerds-r2d
-PYTHONDONTWRITEBYTECODE=1 \\
-PYTHONPATH="$PWD/scripts:$PWD/instance" \\
-NERDS_REPO="$PWD" \\
-python3 -m unittest -v \\
-  tests.test_pilot1_auto_transition \\
-  tests.test_pilot1_lifecycle \\
-  tests.test_pilot1_supervisor \\
-  tests.test_pilot1_task_boundary \\
-  tests.test_r2c_clipboard_policy \\
-  tests.test_r2d4_stopped_campaign \\
-  instance.test_pilot1_task_descriptions
+export PYTHONDONTWRITEBYTECODE=1
+export PYTHONPATH="$PWD/scripts:$PWD/instance"
+export NERDS_REPO="$PWD"
+
+# Only the four inspected Pilot 1 host-unit test modules.
+python3 -m unittest discover -s tests -p 'test_pilot1_*.py' -v
+
+# Two inspected synthetic regression suites.
+python3 -m unittest discover -s tests -p 'test_r2c_clipboard_policy.py' -v
+python3 -m unittest discover -s tests -p 'test_r2d4_stopped_campaign.py' -v
+
+# Inspected participant task-description unit tests.
+python3 -m unittest discover -s instance -p 'test_pilot1_task_descriptions.py' -v
 ```
 
 **Run only after confirming Python packages/imports are available** and under the trusted WSL operator account; no `--apply` and no service restarts. These tests may create temporary files in system temp and use synthetic subprocess/mocked modules; they are not expected to affect participant data. Record test count, failures and errors before changing freeze status. Do **not** substitute `unittest discover` with a broad pattern without reviewing all discovered tests.
