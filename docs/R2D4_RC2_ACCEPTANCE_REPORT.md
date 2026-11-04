@@ -80,7 +80,23 @@ scripts/pilot1_multi_supervisor.py
 
 The reviewed commit changed 76 insertions and 8 deletions. Local and remote SHA matched `513608cd004af5e768512cd292f8b425a8e7e594`; local working tree was empty after push. GitHub independently returned the commit and the new helper.
 
-Isolated source tests **passed**: exact legacy image IDs and named RC2 accepted; wrong image/tag/container name and malformed inputs rejected; all three observed running containers approved. Six Python files passed AST parsing, API startup shell passed `sh -n`, `git diff --check` passed, and the expected eight-file inventory matched. These are **targeted checks**, not full integration CI.
+Isolated source tests **passed**: exact legacy image IDs and named RC2 accepted; wrong image/tag/container name and malformed inputs rejected; all three observed running containers approved. Six Python files passed AST parsing, API startup shell passed `sh -n`, `git diff --check` passed, and the expected eight-file inventory matched. **Additionally, 51 restricted offline regressions passed after source backup (section 3a).** These are targeted checks, not full integration CI.
+
+## 3a. Scoped offline regressions: 51/51 PASS (2026-11-04)
+
+On the accepted, pushed source checkout (`513608cd...`) the operator ran four restricted `unittest` groups after reviewing their offline/mock/test-double behavior:
+
+| Test group | Number | Result |
+| --- | ---: | --- |
+| Pilot 1 handoff, lifecycle, supervisor and release-boundary tests | 32 | PASS |
+| Clipboard privacy and direction policies | 6 | PASS |
+| LibFuzzer stopped/interrupted campaign classifier | 10 | PASS |
+| Task-description neutrality and validity | 3 | PASS |
+| **Total** | **51** | **PASS; zero failures or errors** |
+
+No working-tree changes were reported afterward. The unit test console logs show simulated transitions using mocks and do not represent any additional live participant action. Unit-level Skip Task and stopped-campaign behavior have coverage, but **real participant skip, interruption and recovery scenarios remain untested here**.
+
+**Freeze recommendation:** The code plus observed normal-path RC2 session and 51 offline tests support a **narrow Pilot 1 acceptance tag** with explicit scope. Fresh React build, exact image-source provenance and binary reproducibility, CI and negative-path tests are still open; do not label this production-ready or NSF ACCESS-qualified.
 
 ## 4. Architecture, scope and privacy decisions
 
@@ -101,7 +117,7 @@ Isolated source tests **passed**: exact legacy image IDs and named RC2 accepted;
 4. Mid-transition power/process failure, pre-/post-transaction interruptions, expired invitation and receipt-publication failures; durable markers and manual recovery without automatic replay.
 5. Wider concurrency, session isolation, provisioning from the RC2 image to **new names**, registry failure handling and role-based permissions.
 6. Repeatable production build: `node`, `debian:stable-slim`, `emscripten/emsdk` base tags are not pinned in this Dockerfile; remote dependencies and `npm install` can change. No fresh build from the pushed SHA was executed during this handoff, and no binary-identical digest claim is made.
-7. Automated regression/CI coverage: isolated trust/syntax checks and the live E2E trace passed. GitHub returned no commit status records or PR-triggered workflow runs for the reviewed source commit; this does **not** prove no other workflows exist.
+7. Automated regression/CI coverage: isolated trust/syntax checks, **51 targeted offline unit regressions**, and the live E2E trace passed. GitHub returned no commit status records or PR-triggered workflow runs for the reviewed source commit; this does **not** prove no other workflows exist.
 8. IRB/privacy consent, retention, study data export and full QuestionPro/NSF ACCESS Pilot 2 deployment are separate gates.
 
 ### Release disposition
