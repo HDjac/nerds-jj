@@ -17,7 +17,7 @@ This checklist distinguishes **normal-path acceptance** (passed), **source backu
 - [x] Exactly eight files committed to source SHA `513608c...`, pushed and verified on GitHub, operator observed clean working tree.
 - [ ] Record the exact local Docker build invocation, build context and build arguments used for RC2, if available from operator notes. **Do not infer them from tags**.
 - [x] Record **read-only available** build toolchain/image metadata (Docker 29.4.0, Compose 5.1.2, linux/amd64, image creation timestamp), no private data. Exact build invocation and all base-image digest metadata remain unknown.
-- [x] Inventory relevant test filenames and available GitHub status data; seven offline tests identified for a targeted regression run. **Their results are still pending**, and no CI pass is claimed.
+- [x] Inventory relevant tests and available GitHub status data; seven offline test modules executed: **51 tests passed**, zero failures/errors. No CI pass is claimed.
 - [ ] Review `R2D4_RC2_ACCEPTANCE_REPORT.md` and `R2D4_OPERATOR_RUNBOOK.md` for confidentiality, accuracy and limitations.
 - [ ] Decide whether the release designation means **accepted Pilot 1 RC2** or a broader **ready-for-expanded-testing** release. Do not claim NSF ACCESS/production readiness.
 - [ ] Document final owner approval/signoff and freeze tag SHA if a tag is created.
@@ -82,6 +82,7 @@ systemctl --user is-active nerds-p1-registry-r2d4.service
 | Git diff whitespace and exact 8-file inventory | Operator-run checks | **PASS** |
 | React test suite `npm test` | Not established for reviewed commit | **NOT VERIFIED** |
 | Fresh image build `docker build` | Not performed during this release checkpoint | **NOT VERIFIED** |
+| 51 scoped offline regression tests | Four restricted unittest invocations, source SHA verified, no live services targeted | **PASS** |
 | GitHub CI on exact source commit | No commit status records or PR-triggered runs visible via connector; other workflows unknown | **NOT VERIFIED** |
 | Reverse task order, Skip, interrupted campaigns, lifecycle/recovery | Not part of completed RC2 normal-path test | **OUTSTANDING** |
 
@@ -120,6 +121,22 @@ python3 -m unittest discover -s instance -p 'test_pilot1_task_descriptions.py' -
 ```
 
 **Run only after confirming Python packages/imports are available** and under the trusted WSL operator account; no `--apply` and no service restarts. These tests may create temporary files in system temp and use synthetic subprocess/mocked modules; they are not expected to affect participant data. Record test count, failures and errors before changing freeze status. Do **not** substitute `unittest discover` with a broad pattern without reviewing all discovered tests.
+
+## C2. Actual offline regression results (operator, 2026-11-04)
+
+All four **restricted, mock/synthetic** test commands documented in C1 were executed on the clean accepted-source checkout `513608cd004af5e768512cd292f8b425a8e7e594` and passed:
+
+| Suite | Tests | Failures | Errors | Result |
+| --- | ---: | ---: | ---: | --- |
+| `test_pilot1_*.py` (handoff, lifecycle, supervisor, task boundary) | 32 | 0 | 0 | **PASS** |
+| `test_r2c_clipboard_policy.py` | 6 | 0 | 0 | **PASS** |
+| `test_r2d4_stopped_campaign.py` | 10 | 0 | 0 | **PASS** |
+| `test_pilot1_task_descriptions.py` | 3 | 0 | 0 | **PASS** |
+| **Total** | **51** | **0** | **0** | **PASS** |
+
+The operator's `git status --short` printed nothing afterward. Mocked transition logs stating `Executing guarded task transition` were produced by unit tests and do **not** mean actual participant transitions occurred. The remaining two live participants and blocked session were not targeted by these commands.
+
+**What these tests do not establish:** live reverse randomized task order, live Skip Task, real interrupted/ASan campaigns, mid-transition power failure, successful rebuild from a fresh source checkout, or production NSF ACCESS readiness. A skipped outcome is modeled in unit tests, but there is **no new live Skip acceptance** in these results.
 
 ## D. Reproducibility caveats
 
