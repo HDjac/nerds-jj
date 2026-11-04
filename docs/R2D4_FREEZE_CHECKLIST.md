@@ -16,8 +16,8 @@ This checklist distinguishes **normal-path acceptance** (passed), **source backu
 - [x] Seven tracked changes + new 45-line image-trust helper reviewed; targeted positive/negative image trust and syntax checks passed.
 - [x] Exactly eight files committed to source SHA `513608c...`, pushed and verified on GitHub, operator observed clean working tree.
 - [ ] Record the exact local Docker build invocation, build context and build arguments used for RC2, if available from operator notes. **Do not infer them from tags**.
-- [ ] Record offline build toolchain metadata and sources; no secrets, participant identifiers or private data.
-- [ ] Inventory CI/tests actually run against reviewed source commit; distinguish prior pilot tests from RC2 tests.
+- [x] Record **read-only available** build toolchain/image metadata (Docker 29.4.0, Compose 5.1.2, linux/amd64, image creation timestamp), no private data. Exact build invocation and all base-image digest metadata remain unknown.
+- [x] Inventory relevant test filenames and available GitHub status data; seven offline tests identified for a targeted regression run. **Their results are still pending**, and no CI pass is claimed.
 - [ ] Review `R2D4_RC2_ACCEPTANCE_REPORT.md` and `R2D4_OPERATOR_RUNBOOK.md` for confidentiality, accuracy and limitations.
 - [ ] Decide whether the release designation means **accepted Pilot 1 RC2** or a broader **ready-for-expanded-testing** release. Do not claim NSF ACCESS/production readiness.
 - [ ] Document final owner approval/signoff and freeze tag SHA if a tag is created.
@@ -86,6 +86,38 @@ systemctl --user is-active nerds-p1-registry-r2d4.service
 | Reverse task order, Skip, interrupted campaigns, lifecycle/recovery | Not part of completed RC2 normal-path test | **OUTSTANDING** |
 
 **Do not infer CI absence from the limited commit status query**; inspect repository workflows locally. `instance/app/package.json` exposes `npm run build` and `npm test` through react-scripts. If running tests, use a separate checkout/isolated environment and record exact commands, lockfile and results. Avoid running `npm install`, `docker build`, `docker compose up`, restarts or destructive operations against the accepted live study environment as part of this read-only inventory.
+
+## C1. Verified WSL inventory and offline test discovery (2026-11-04)
+
+Operator ran the checklist's read-only WSL inventory:
+
+- **Source:** `513608cd004af5e768512cd292f8b425a8e7e594`; `git status --short` was empty.
+- **Accepted image:** `sha256:825246d5460d56c0df37444bf113e7c9a03e8867d724b86401a8c24a098a5abf`; Docker image created `2026-11-04T19:58:41.144438164Z`; platform `linux/amd64`.
+- **Tools:** Docker client/server `29.4.0`, Docker Compose `v5.1.2`.
+- **Build inputs (observed):** `FROM node AS build`, `RUN npm install`, `RUN npm run build`, `FROM debian:stable-slim`, and `COPY --from=emscripten/emsdk`; not digest-pinned. No rebuild performed.
+- **Supervisor:** Exactly two unrelated active sessions had 2 collectors each; previously blocked manual-review session remained blocked; completed RC2 was not active.
+- **Discovered test files:** `instance/test_pilot1_task_descriptions.py`, `tests/test_pilot1_auto_transition.py`, `tests/test_pilot1_lifecycle.py`, `tests/test_pilot1_supervisor.py`, `tests/test_pilot1_task_boundary.py`, `tests/test_r2c_clipboard_policy.py`, `tests/test_r2d4_stopped_campaign.py`, plus the older `scripts/pilot1_issue_test_session.py`, `test/get_suggestions.py` and `test/test-instance.py`. The inventory reported no `.github/workflows/*` tracked paths; connector's commit-status and PR-run summaries were empty, which is not conclusive proof of the absence of every possible CI configuration.
+
+### Suggested offline regression run (pending operator result)
+
+Source inspection confirmed the **seven** tests below are unit/mock/synthetic tests, not live Docker/DB mutation scripts; use the **explicit module names**, not repository-wide discovery, to avoid running older `test/test-instance.py` or enrollment scripts. `test_r2c_clipboard_policy.py` defaults to a different checkout unless `NERDS_REPO` is set. `PYTHONPATH` also ensures sibling module imports in tests resolve from the accepted checkout.
+
+```bash
+cd ~/nerds-r2d
+PYTHONDONTWRITEBYTECODE=1 \\
+PYTHONPATH="$PWD/scripts:$PWD/instance" \\
+NERDS_REPO="$PWD" \\
+python3 -m unittest -v \\
+  tests.test_pilot1_auto_transition \\
+  tests.test_pilot1_lifecycle \\
+  tests.test_pilot1_supervisor \\
+  tests.test_pilot1_task_boundary \\
+  tests.test_r2c_clipboard_policy \\
+  tests.test_r2d4_stopped_campaign \\
+  instance.test_pilot1_task_descriptions
+```
+
+**Run only after confirming Python packages/imports are available** and under the trusted WSL operator account; no `--apply` and no service restarts. These tests may create temporary files in system temp and use synthetic subprocess/mocked modules; they are not expected to affect participant data. Record test count, failures and errors before changing freeze status. Do **not** substitute `unittest discover` with a broad pattern without reviewing all discovered tests.
 
 ## D. Reproducibility caveats
 
