@@ -240,6 +240,21 @@ Previously **11/11 reverse-order enrollment and image-trust mock tests** also pa
 
 **Operational gate is still OPEN:** Active `pilot1_refresh_registry.py` from frozen checkout is the only known writer to the shared authorization registry; two active sessions depend on it. Neither restart the service nor start a second writer to the same file. The live acceptance test should wait for a reviewed single-writer cutover after active sessions finish, or a fully isolated gateway/registry consumer. No DB enrollment, Docker container creation, invitation or lifecycle apply has been authorized.
 
+## Operator decision: retire old Pilot 1 test sessions (2026-11-04)
+
+The operator clarified that the two active sessions shown by the supervisor are **old, disposable test participants** and may be stopped. This removes the requirement to wait for them to finish their workflows; it **does not** permit broad container shutdown, skipping archive preservation, or removing the unrelated manual-review-blocked session.
+
+**Planned controlled approach (not yet executed):**
+
+1. On the **frozen** host checkout, obtain a DB-authoritative read-only map for only `nerds-pilot1-crash-r2d4` and `nerds-pilot1-browser-r1-test`. Verify two unique active sessions, matching immutable legacy images, 2 task-scoped collectors per session, correct systemd/MainPID ownership or identified legacy PIDs, no pending Finish/Skip request, no transition inflight, and no supervisor watch/apply process.
+2. Preserve the original archived data and record existing collector/session state privately. If there is unflushed telemetry, safely stop exact collector units/processes and perform one-shot final ingest/source reconciliation **before changing DB active status**, using their previously validated task-run bindings. Never delete a workspace just to mark the session stopped.
+3. Mark only the two known test session DB rows `aborted` with end timestamps using a fail-closed scoped transaction **after** collector reconciliation. Preserve task-run records/evidence; do **not** issue fake Finish/Skip or completion receipts.
+4. Stop only those two old test containers; keep completed RC2 and manually blocked session untouched. Confirm no old collectors or active sessions remain; check shared registry regeneration.
+5. Only once the authorization registry has no active dependent participants, perform a reviewed **single-writer** cutover from frozen registry refresh code to the qualification branch's exact image-trust allowlist. Do not create simultaneous publishers or silently replace production files.
+6. Verify registry still rejects arbitrary names and non-pinned image IDs, then create one new controlled `lowyield_first` qualification session. Keep the participant test marker private and exclude it from study analysis.
+
+**Operator authorization:** the two legacy test sessions can be retired. **Execution is pending exact collector identity/preflight and a guarded stop plan.** Do not run `docker compose down`, kill all Python processes, restart all user systemd units, or modify the blocked session.
+
 ## Phase 3 — live study qualification (NOT YET AUTHORIZED)
 
 Only after the above outputs and registry-isolation strategy have been reviewed:
