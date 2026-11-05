@@ -204,10 +204,14 @@ if not pid.isdecimal() or int(pid)<1:
     raise SystemExit('STOP: service MainPID invalid')
 args=[a.decode('utf-8','replace') for a in (Path('/proc')/pid/'cmdline').read_bytes().split(bytes([0])) if a]
 def opt(name):
-    if name not in args:
-        return None
-    i=args.index(name)
-    return args[i+1] if i+1<len(args) else ''
+    exact = [i for i,a in enumerate(args) if a == name]
+    attached = [a.split('=',1)[1] for a in args if a.startswith(name+'=')]
+    if len(exact)+len(attached)>1:
+        raise SystemExit('STOP: duplicate output options')
+    if exact:
+        i=exact[0]
+        return args[i+1] if i+1<len(args) else ''
+    return attached[0] if attached else None
 output=opt('--output')
 source=next((a for a in args if a.endswith('pilot1_refresh_registry.py')), '')
 print('REFRESH_ENTRYPOINT_RC2:', '/nerds-r2d/' in source and '/nerds-r2d-reverse/' not in source)
