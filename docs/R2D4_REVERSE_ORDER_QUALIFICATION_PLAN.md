@@ -255,6 +255,14 @@ The operator clarified that the two active sessions shown by the supervisor are 
 
 **Operator authorization:** the two legacy test sessions can be retired. **Execution is pending exact collector identity/preflight and a guarded stop plan.** Do not run `docker compose down`, kill all Python processes, restart all user systemd units, or modify the blocked session.
 
+## Retirement preflight — passed (operator output, 2026-11-04)
+
+The operator's guarded host-side preflight selected **exactly the two authorized legacy test containers**: `nerds-pilot1-browser-r1-test` and `nerds-pilot1-crash-r2d4`. For each, the PostgreSQL active session-to-container assignment and immutable image approval passed; released task exists; no `transition-inflight` or `needs-review` marker and no pending Finish/Skip request. Each container has exactly one `pilot1_auto_ingest.py` and one `pilot1_track_sources.py` collector whose task binding matches the released task. All four collector units are **systemd-user** owned, with matching MainPID and `Restart=no`; **zero** global `pilot1_multi_supervisor.py --watch --apply` processes were found.
+
+**Gate result:** targeted evidence-preserving retirement can proceed using exact identities, but retirement has **NOT been executed**. Revalidate identities and unit ownership immediately before mutating. Stop exactly four scoped collector units using `pilot1_lifecycle.stop_collectors(task_id, 'systemd-user')` for each participant and perform final `pilot1_lifecycle.flush(task_id)` while the session/DB task remain active, then `archive_workspace` before changing the session's status. Validate no ongoing fuzzer/compiler process first. Preserve private logs; any partial stop or failed drain is **manual review**, not automatic replay. Mark the two sessions `aborted` only in a later guarded transaction once collection/archival verified, then `docker stop` only those two named containers (do not remove).
+
+The completed RC2 acceptance container and manually blocked session must remain unchanged. Existing registry writer stays running until a controlled single-writer cutover following successful retirement.
+
 ## Phase 3 — live study qualification (NOT YET AUTHORIZED)
 
 Only after the above outputs and registry-isolation strategy have been reviewed:
