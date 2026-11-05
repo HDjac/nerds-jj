@@ -147,7 +147,7 @@ print('MAINPID_PRESENT:', pid.isdecimal() and int(pid)>0)
 print('UNIT_PATH_EXISTS:', Path(data.get('FragmentPath','/nonexistent')).is_file())
 if pid.isdecimal() and int(pid)>0:
     proc = Path('/proc')/pid
-    args = (proc/'cmdline').read_bytes().decode('utf-8','replace').split('\\0')
+    args = (proc/'cmdline').read_bytes().decode('utf-8','replace').split(chr(0))
     print('PROCESS_EXE_BASENAME:', Path(os.readlink(proc/'exe')).name)
     print('PROCESS_CWD_RC2:', '/nerds-r2d' in os.readlink(proc/'cwd'))
     print('PROCESS_CWD_REVERSE:', '/nerds-r2d-reverse' in os.readlink(proc/'cwd'))
