@@ -79,6 +79,46 @@ The registry publisher may still be running code from the **frozen checkout** an
 
 Before creating anything, confirm that the new container will use the same immutable image ID, unprivileged user, study label, approved network, appropriate runtime restrictions and internal routing, without conflicting ports/resources. Do not blindly clone a running participant container or start a broad supervisor --apply.
 
+## Phase 2 observation record (operator output, 2026-11-04)
+
+Read-only Docker/service inventory completed for all three existing containers:
+
+| Container | Image ID | User/label/network | Privileged | Mounts | Ports | Memory | Restart |
+| --- | --- | --- | --- | ---: | --- | --- | --- |
+| RC2 completed acceptance | `sha256:825246d5460d56c0df37444bf113e7c9a03e8867d724b86401a8c24a098a5abf` | `user` / `pilot1` / `devob_instances` | false | 0 | none | unlimited | no |
+| Active crash R2D4 legacy | `sha256:787f850c610ec095eaf3b7e62172ada9ffb6d0b2f2ff1dee590434b5a7ed0033` | same | false | 0 | none | unlimited | no |
+| Active browser R1 legacy | `sha256:d39c6a42b3692246a0ffc086f04ea2f83d261d67cf820fcf96a7e34d78f66581` | same | false | 0 | none | 1 GiB | no |
+
+New test name `nerds-pilot1-r2d4-reverse-qualification` **available**. Registry service **active**. Supervisor preview remains two separate active sessions with exactly **2 collectors each**; unrelated manually blocked session remains blocked. Completed RC2 did not reappear among active sessions.
+
+**Readiness finding:** container identity/network configuration is consistent with the accepted Pilot 1 topology and new name is unused. This is **not** authorization to create the new container. No test-specific Docker memory/PID limits have been chosen, and registration from the live registry service remains unverified. The 11 new offline tests were **not included in the supplied Phase 2 output**; request their full PASS/fail summary separately.
+
+### Next read-only registry provenance check
+
+Use a sanitized active-unit inspection that **does not print ExecStart arguments, environment variables or credentials**:
+
+```bash
+cd ~/nerds-r2d-reverse
+python3 - <<'PY'
+import subprocess
+service = 'nerds-p1-registry-r2d4.service'
+props = ('ActiveState','SubState','MainPID','FragmentPath','WorkingDirectory','ExecStart')
+cmd = ['systemctl','--user','show',service] + [f'--property={p}' for p in props]
+r = subprocess.run(cmd,capture_output=True,text=True,check=True)
+values = dict(line.split('=',1) for line in r.stdout.splitlines() if '=' in line)
+for name in ('ActiveState','SubState'):
+    print(name+':', values.get(name,'unknown'))
+print('MAINPID_PRESENT:', values.get('MainPID','0') not in ('','0'))
+raw = '\\n'.join((values.get('ExecStart',''),values.get('WorkingDirectory','')))
+for label, path in [('RC2_SOURCE','/nerds-r2d/'),('REVERSE_WORKTREE','/nerds-r2d-reverse/')]:
+    print(label+'_REFERENCED:', path in raw)
+print('REGISTRY_SCRIPT_MENTIONED:', 'pilot1_instance_registry.py' in raw)
+print('SERVICE_ARGUMENTS_AND_ENV: intentionally suppressed')
+PY
+```
+
+If source ownership is unknown, **stop** before creating a new participant. Never restart the live registry merely to load this feature branch.
+
 ## Phase 3 — live study qualification (NOT YET AUTHORIZED)
 
 Only after the above outputs and registry-isolation strategy have been reviewed:
