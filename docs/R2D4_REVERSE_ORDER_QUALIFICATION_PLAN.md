@@ -179,7 +179,7 @@ The refresh script calls `publish` in a repeated loop (default 10-second interva
 
 **Impact:** the already running process imports modules from its launch checkout; **the additional reverse container allowlist entry on the separate GitHub branch is NOT active merely because the branch exists**. Do not create a new test participant/container relying on this active publisher to admit it until its module provenance and output destination are confirmed.
 
-**No-interference gate:** Never start a second publisher writing to the live registry output. Do not replace, restart or modify the running publisher while existing participants are active unless a specific reviewed no-interference cutover is demonstrated. A separate private output and gateway can be explored but is not implemented or qualified yet. The 8 offline registry tests in `tests/test_r2d4_reverse_registry.py` are still awaiting operator results.
+**No-interference gate:** Never start a second publisher writing to the live registry output. Do not replace, restart or modify the running publisher while existing participants are active unless a specific reviewed no-interference cutover is demonstrated. A separate private output and gateway can be explored but is not implemented or qualified yet. The 8 offline registry tests in `tests/test_r2d4_reverse_registry.py` passed; the live deployment gate remains open.
 
 ### Safe test and publication-target audit
 
@@ -230,7 +230,15 @@ Operator's sanitized live-process audit: `OUTPUT_OVERRIDE_PRESENT=True`, `OUTPUT
 
 **Architecture:** `pilot1_refresh_registry.py` imports `pilot1_publish_registry.publish` → `pilot1_instance_registry.discover` → `pilot1_image_trust.image_is_approved`; the publisher atomically replaces its registry file. Docker Compose binds the shared registry directory **read-only into the submit service**. A new output file alone is **not** a working independent authorization path; an independent registry needs its own isolated consumer, gateway identity and routing. Multiple writers to the same registry path would race and threaten existing participant access.
 
-**Decision:** Keep the active publisher unchanged. Either plan a controlled single-writer policy update after the two live participant sessions finish, or qualify a fully isolated gateway and registry consumer. No new test session, container, registry replacement/restart, or competing publisher until this is settled. The **eight new offline registry tests are still awaiting operator results**; the previous 11 qualification unit tests passed.
+**Decision:** Keep the active publisher unchanged. Either plan a controlled single-writer policy update after the two live participant sessions finish, or qualify a fully isolated gateway and registry consumer. No new test session, container, registry replacement/restart, or competing publisher until this is settled. The **eight new offline registry tests passed (8/8)**; the previous 11 qualification unit tests passed.
+
+## Phase 2 qualification regression result (operator, 2026-11-04)
+
+**PASS: 8/8 offline registry-discovery tests**, with zero failures or errors (0.003 seconds). The passing cases specifically cover rejecting duplicate IP addresses, preserving both existing legacy image allowlist entries, ignoring mismatched DB/container binding, recognizing the specially named reverse-qualification container, retaining original RC2 approval, denying unexpected privilege/user/label, rejecting substituted tags/digests, and failing closed on unapproved RC2 names.
+
+Previously **11/11 reverse-order enrollment and image-trust mock tests** also passed. Combined **19/19 new qualification tests** have passed. These were offline/mock tests, **not** confirmation that the active registry has loaded the test-branch allowlist or that a participant has been provisioned.
+
+**Operational gate is still OPEN:** Active `pilot1_refresh_registry.py` from frozen checkout is the only known writer to the shared authorization registry; two active sessions depend on it. Neither restart the service nor start a second writer to the same file. The live acceptance test should wait for a reviewed single-writer cutover after active sessions finish, or a fully isolated gateway/registry consumer. No DB enrollment, Docker container creation, invitation or lifecycle apply has been authorized.
 
 ## Phase 3 — live study qualification (NOT YET AUTHORIZED)
 
@@ -246,4 +254,4 @@ Only after the above outputs and registry-isolation strategy have been reviewed:
 
 **Success:** correct reversed tasks, identical pinned accepted image, exactly-once completion, clean task boundaries, preserved evidence, participant-visible receipt, zero cross-session interference and no LLM response capture.
 
-**Immediate next action:** Execute the additional eight offline registry tests; perform sanitized active-process provenance inspection above. No participant/session creation, registry restart or container changes yet.
+**Immediate next action:** Plan a no-interference registry cutover after active sessions complete, or an entirely isolated gateway/registry consumer. All 19 new offline qualification tests passed. No participant/session creation, registry restart or container changes yet.
