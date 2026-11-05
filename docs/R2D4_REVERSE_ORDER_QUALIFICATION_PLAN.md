@@ -168,6 +168,58 @@ git grep -l -E 'nerds-p1-registry-r2d4|pilot1_instance_registry|registry/pilot' 
 
 If the process is a shell wrapper or the actual registry importer is unclear, inspect only the matching non-secret **source files** and unit launcher's basename next. Keep the existing registry process and current two active participants untouched.
 
+## Phase 2 registry dependency confirmed from process and source (2026-11-04)
+
+Operator's sanitized live `/proc/<MainPID>` inspection reported `python3.10`, process script basename **`pilot1_refresh_registry.py`**, RC2 checkout path present in process arguments, reverse checkout absent. The runtime CWD is neither checkout; CWD alone does not determine module provenance.
+
+The accepted source import chain was independently verified:
+`pilot1_refresh_registry.py` → `pilot1_publish_registry.publish` → `pilot1_instance_registry.discover` → `pilot1_image_trust.image_is_approved`.
+
+The refresh script calls `publish` in a repeated loop (default 10-second interval, 30-second TTL). The publisher writes the default private registry file under `~/nerds-pilot-runtime/registry/participants.json` using atomic replacement. **Actual service command-line overrides, output path and loaded module path were not exposed or independently read**; those are still useful no-secret preflight checks.
+
+**Impact:** the already running process imports modules from its launch checkout; **the additional reverse container allowlist entry on the separate GitHub branch is NOT active merely because the branch exists**. Do not create a new test participant/container relying on this active publisher to admit it until its module provenance and output destination are confirmed.
+
+**No-interference gate:** Never start a second publisher writing to the live registry output. Do not replace, restart or modify the running publisher while existing participants are active unless a specific reviewed no-interference cutover is demonstrated. A separate private output and gateway can be explored but is not implemented or qualified yet. The 8 offline registry tests in `tests/test_r2d4_reverse_registry.py` are still awaiting operator results.
+
+### Safe test and publication-target audit
+
+```bash
+cd ~/nerds-r2d-reverse
+
+git status --short
+git pull --ff-only origin test/r2d4-reverse-order-qualification
+
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$PWD/scripts" \
+python3 -m unittest discover -s tests -p 'test_r2d4_reverse_registry.py' -v
+
+python3 - <<'PY'
+from pathlib import Path
+import os, subprocess
+service='nerds-p1-registry-r2d4.service'
+raw=subprocess.check_output(['systemctl','--user','show',service,
+                              '--property=MainPID,FragmentPath'],text=True)
+props=dict(line.split('=',1) for line in raw.splitlines() if '=' in line)
+pid=props.get('MainPID','0')
+if not pid.isdecimal() or int(pid)<1:
+    raise SystemExit('STOP: service MainPID invalid')
+args=[a.decode('utf-8','replace') for a in (Path('/proc')/pid/'cmdline').read_bytes().split(bytes([0])) if a]
+def opt(name):
+    if name not in args:
+        return None
+    i=args.index(name)
+    return args[i+1] if i+1<len(args) else ''
+output=opt('--output')
+source=next((a for a in args if a.endswith('pilot1_refresh_registry.py')), '')
+print('REFRESH_ENTRYPOINT_RC2:', '/nerds-r2d/' in source and '/nerds-r2d-reverse/' not in source)
+print('OUTPUT_OPTION_PRESENT:', output is not None)
+print('OUTPUT_EQUALS_DEFAULT:', output is None or os.path.expanduser(output)==str(Path.home()/'nerds-pilot-runtime/registry/participants.json'))
+print('OUTPUT_PATH_AND_ARGUMENTS: suppressed')
+print('PROCESS_ALIVE:', (Path('/proc')/pid).is_dir())
+PY
+```
+
+This audit prints only booleans, not raw service arguments or registry contents. It is not a deployment instruction.
+
 ## Phase 3 — live study qualification (NOT YET AUTHORIZED)
 
 Only after the above outputs and registry-isolation strategy have been reviewed:
