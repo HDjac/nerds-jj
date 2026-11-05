@@ -119,6 +119,55 @@ PY
 
 If source ownership is unknown, **stop** before creating a new participant. Never restart the live registry merely to load this feature branch.
 
+## Phase 2 additional results: offline tests and registry provenance (operator, 2026-11-04)
+
+- **PASS:** all **11/11** isolated `test_r2d4_reverse_qualification.py` assertions, no errors/failures; no live Docker or PostgreSQL touched by those mocked tests.
+- **PASS:** `pilot1_enroll_reverse_qualification.py` preview explicitly displayed `lowyield_first` (position 1 Low-Yield v1, position 2 Dense v2), with no database/filesystem changes.
+- **Registry unit:** `nerds-p1-registry-r2d4.service` reported `ActiveState=active`, `SubState=running`, `MainPID` present. Its sanitized ExecStart/WorkingDirectory string **references `/nerds-r2d/`** (frozen RC2 checkout), **does not reference `/nerds-r2d-reverse/`**, and did **not directly mention `pilot1_instance_registry.py`**. The actual executed entrypoint and loaded trust module are therefore **not yet proven** by these checks. The branch's new allowlist should **not** be assumed to be in effect in the live registry.
+- **New:** An extra **offline registry-discovery test module** `tests/test_r2d4_reverse_registry.py` was added (8 test methods) to test synthetic DB/container bindings, exact image and name trust, existing legacy compatibility, network/label/user checks, duplicate IP rejection, and ignored unknown names. **These eight tests are not yet operator-executed.**
+
+**Hold live enrollment and provisioning** until source process and registry publication path are known, offline registry checks pass, and a no-interference strategy is reviewed. Do not restart the registry or rewrite its registry artifact with live participants active.
+
+### Additional read-only active-registry provenance inspection
+
+Run from WSL; the script reports only process executable/file basenames and checkout-origin booleans, **not service arguments, environment variables, credentials or raw process command lines**:
+
+```bash
+cd ~/nerds-r2d-reverse
+python3 - <<'PY'
+from pathlib import Path
+import os, subprocess
+service = 'nerds-p1-registry-r2d4.service'
+props = ('MainPID','FragmentPath','WorkingDirectory','ExecStart')
+cmd = ['systemctl','--user','show',service] + [f'--property={key}' for key in props]
+raw = subprocess.check_output(cmd, text=True)
+data = dict(line.split('=', 1) for line in raw.splitlines() if '=' in line)
+pid = data.get('MainPID', '0')
+print('MAINPID_PRESENT:', pid.isdecimal() and int(pid)>0)
+print('UNIT_PATH_EXISTS:', Path(data.get('FragmentPath','/nonexistent')).is_file())
+if pid.isdecimal() and int(pid)>0:
+    proc = Path('/proc')/pid
+    args = (proc/'cmdline').read_bytes().decode('utf-8','replace').split('\\0')
+    print('PROCESS_EXE_BASENAME:', Path(os.readlink(proc/'exe')).name)
+    print('PROCESS_CWD_RC2:', '/nerds-r2d' in os.readlink(proc/'cwd'))
+    print('PROCESS_CWD_REVERSE:', '/nerds-r2d-reverse' in os.readlink(proc/'cwd'))
+    print('PROCESS_CMDLINE_RC2:', any('/nerds-r2d/' in a for a in args))
+    print('PROCESS_CMDLINE_REVERSE:', any('/nerds-r2d-reverse/' in a for a in args))
+    print('PROCESS_SCRIPT_BASENAMES:', sorted(set(Path(a).name for a in args if a.endswith(('.py','.sh')))))
+unit = Path(data.get('FragmentPath','/nonexistent'))
+if unit.is_file():
+    txt = unit.read_text(errors='replace')
+    print('UNIT_REGISTRY_IMPORT_MENTIONED:', 'pilot1_instance_registry' in txt)
+    print('UNIT_SCRIPT_BASENAMES:', sorted(set(Path(word).name for word in txt.split() if word.endswith(('.py','.sh')))))
+print('RAW_ARGUMENTS_AND_ENVIRONMENT: suppressed')
+PY
+
+# Only matching filename paths are displayed, not potentially sensitive source lines.
+git grep -l -E 'nerds-p1-registry-r2d4|pilot1_instance_registry|registry/pilot' HEAD -- scripts containers || true
+```
+
+If the process is a shell wrapper or the actual registry importer is unclear, inspect only the matching non-secret **source files** and unit launcher's basename next. Keep the existing registry process and current two active participants untouched.
+
 ## Phase 3 — live study qualification (NOT YET AUTHORIZED)
 
 Only after the above outputs and registry-isolation strategy have been reviewed:
@@ -133,4 +182,4 @@ Only after the above outputs and registry-isolation strategy have been reviewed:
 
 **Success:** correct reversed tasks, identical pinned accepted image, exactly-once completion, clean task boundaries, preserved evidence, participant-visible receipt, zero cross-session interference and no LLM response capture.
 
-**Immediate next action:** Phase 1 offline tests and Phase 2 **read-only** inventory. No participant/session creation or container changes yet.
+**Immediate next action:** Execute the additional eight offline registry tests; perform sanitized active-process provenance inspection above. No participant/session creation, registry restart or container changes yet.
