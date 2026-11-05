@@ -224,6 +224,14 @@ PY
 
 This audit prints only booleans, not raw service arguments or registry contents. It is not a deployment instruction.
 
+## Phase 2 output-target confirmation (2026-11-04)
+
+Operator's sanitized live-process audit: `OUTPUT_OVERRIDE_PRESENT=True`, `OUTPUT_IS_DEFAULT=True`, `OUTPUT_CONFIGURATION_UNAMBIGUOUS=True`. Thus the active refresher explicitly uses the expected shared registry output with no contradictory output options.
+
+**Architecture:** `pilot1_refresh_registry.py` imports `pilot1_publish_registry.publish` → `pilot1_instance_registry.discover` → `pilot1_image_trust.image_is_approved`; the publisher atomically replaces its registry file. Docker Compose binds the shared registry directory **read-only into the submit service**. A new output file alone is **not** a working independent authorization path; an independent registry needs its own isolated consumer, gateway identity and routing. Multiple writers to the same registry path would race and threaten existing participant access.
+
+**Decision:** Keep the active publisher unchanged. Either plan a controlled single-writer policy update after the two live participant sessions finish, or qualify a fully isolated gateway and registry consumer. No new test session, container, registry replacement/restart, or competing publisher until this is settled. The **eight new offline registry tests are still awaiting operator results**; the previous 11 qualification unit tests passed.
+
 ## Phase 3 — live study qualification (NOT YET AUTHORIZED)
 
 Only after the above outputs and registry-isolation strategy have been reviewed:
