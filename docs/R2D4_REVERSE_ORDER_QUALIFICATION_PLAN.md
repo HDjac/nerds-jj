@@ -263,6 +263,12 @@ The operator's guarded host-side preflight selected **exactly the two authorized
 
 The completed RC2 acceptance container and manually blocked session must remain unchanged. Existing registry writer stays running until a controlled single-writer cutover following successful retirement.
 
+## Legacy retirement: Phase 1 evidence drain passed (operator output, 2026-11-04)
+
+**Operator-confirmed Phase 1 PASS** against exactly `nerds-pilot1-browser-r1-test` and `nerds-pilot1-crash-r2d4`: four task-scoped systemd collectors stopped, final `--once --apply` CLI/source ingestion completed, no pending data reported, two workspace archives created; no session status changed and both Docker containers remained up. Private audit: `~/nerds-pilot-runtime/retirements/r2d4-legacy-tests-20261104`. Both study-session and task-run status constraints allow `aborted`.
+
+**Phase 2 DB finalization is NOT YET EXECUTED**. Prepared separately as a guarded local operator-only Python helper for preview / explicit apply / read-only verification. Required gates: exact Phase 1 audit-to-live-DB binding, private logs, zero active collectors, inactive systemd units, no pending Finish/Skip or supervisor transition, image/container identity, exact two sessions with one released task each. SQL must run one atomic transaction with row-count guards, mark only the two released tasks and two sessions `aborted`, preserve previously completed/skipped or locked task rows, revoke only their outstanding auth/invitation tokens and reject retries after any ambiguous outcome. Run **read-only verification** before stopping the two legacy Docker containers. This must not alter the completed RC2, blocked session or live registry publisher.
+
 ## Phase 3 — live study qualification (NOT YET AUTHORIZED)
 
 Only after the above outputs and registry-isolation strategy have been reviewed:
