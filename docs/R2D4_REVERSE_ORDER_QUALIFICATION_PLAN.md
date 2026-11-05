@@ -269,6 +269,16 @@ The completed RC2 acceptance container and manually blocked session must remain 
 
 **Phase 2 DB finalization is NOT YET EXECUTED**. Prepared separately as a guarded local operator-only Python helper for preview / explicit apply / read-only verification. Required gates: exact Phase 1 audit-to-live-DB binding, private logs, zero active collectors, inactive systemd units, no pending Finish/Skip or supervisor transition, image/container identity, exact two sessions with one released task each. SQL must run one atomic transaction with row-count guards, mark only the two released tasks and two sessions `aborted`, preserve previously completed/skipped or locked task rows, revoke only their outstanding auth/invitation tokens and reject retries after any ambiguous outcome. Run **read-only verification** before stopping the two legacy Docker containers. This must not alter the completed RC2, blocked session or live registry publisher.
 
+## Legacy retirement: Phase 2 database apply reported success (operator output, 2026-11-04)
+
+After the full Phase 1 drain (2 archived workspaces, 4 stopped collectors), the operator ran the guarded Phase 2 database finalization and supplied the following **apply-success summary**: exact Phase 1 evidence and stopped collectors reverified; **exactly two legacy test sessions and their released task rows changed to `aborted`**; outstanding authentication and invitation credentials revoked; previously completed/skipped or locked tasks preserved. The command explicitly reported that **Docker containers were not stopped/removed**, and the **existing registry publisher remained unchanged**.
+
+**Important distinction:** this was the **apply output**, not the separate `--verify` output. The next action is a fresh, read-only `retire_r2d4_legacy_phase2.py --verify`, which requires both exact private audit bindings to have aborted session/task status and end timestamps. Do not repeat `--apply`; its private attempt marker must remain in place.
+
+A separate **Docker-only Phase 3 stop helper** was prepared for the operator outside the Git repository (`stop_r2d4_legacy_phase3.py`; not yet executed on WSL). It checks the private audit, Phase 2 verification, exact immutable Docker IDs and image approvals, absence of active collectors/watchers, and stops **only** the two old test containers by full Docker ID. It does **not** remove containers, touch other sessions, modify PostgreSQL or restart the live registry. The helper has a read-only preview, an explicit `--apply`, and a read-only `--verify` mode. It creates a private stop-attempt marker before the first Docker change; a failure must be reconciled manually rather than replayed.
+
+**Phase 3 not yet executed.** The completed RC2 acceptance container and manual-review-blocked session remain excluded by the scope. Once the two old test containers are stopped, inspect the single live registry publisher's authorization view and plan a controlled, one-writer trust policy cutover for the reverse-order test. All **19/19** new offline qualification tests remain passed. Draft PR #4 is still unmerged.
+
 ## Phase 3 — live study qualification (NOT YET AUTHORIZED)
 
 Only after the above outputs and registry-isolation strategy have been reviewed:
