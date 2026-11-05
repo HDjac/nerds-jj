@@ -1,13 +1,16 @@
 """Immutable Docker-image allowlist for Pilot 1.
 
 Legacy entries preserve the two validated existing participants.
-The RC2 exception is limited to one designated acceptance container.
+RC2 exceptions are limited to designated acceptance and reverse-qualification containers.
 Never trust a mutable Docker tag alone.
 """
 
 LEGACY_TAG = "devob_instance:cli-pilot-protected"
 RC2_TAG = "devob_instance:r2d4-consolidated-rc2"
 RC2_NAME = "nerds-pilot1-r2d4-rc2-acceptance"
+# Dedicated second participant only; never admit arbitrary RC2 container names.
+REVERSE_QUALIFICATION_NAME = "nerds-pilot1-r2d4-reverse-qualification"
+RC2_APPROVED_NAMES = frozenset({RC2_NAME, REVERSE_QUALIFICATION_NAME})
 
 LEGACY_IDS = frozenset({
     "sha256:d39c6a42b3692246a0ffc086f04ea2f83d261d67cf820fcf96a7e34d78f66581",
@@ -20,7 +23,7 @@ RC2_ID = (
 
 
 def image_is_approved(container, name):
-    """Validate the actual image ID, configured tag, and RC2 container name.
+    """Validate actual image ID, configured tag, and an explicit approved name.
 
     Callers must additionally enforce running state, DB instance binding,
     unprivileged user, study label, and participant network.
@@ -39,7 +42,7 @@ def image_is_approved(container, name):
         return immutable_id in LEGACY_IDS
 
     return (
-        name == RC2_NAME
+        name in RC2_APPROVED_NAMES
         and configured_tag == RC2_TAG
         and immutable_id == RC2_ID
     )
